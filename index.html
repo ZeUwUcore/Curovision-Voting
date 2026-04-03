@@ -170,7 +170,9 @@ async function startVoting() {
 
 function showRecap() {
     // Overlay sichtbar machen
-    onst overlay = document.getElementById('recap-overlay');
+    function showRecap() {
+    // Overlay sichtbar machen
+    const overlay = document.getElementById('recap-overlay'); // Jetzt korrekt geschrieben
     const iframe = document.getElementById('recap-video');
     
     // Setzt die URL neu, damit das Video bei jedem Login von vorne startet
@@ -178,11 +180,13 @@ function showRecap() {
     
     overlay.classList.remove('hidden');
     
-    
     // Timer zurücksetzen
     recapTimeLeft = 30; 
     const btn = document.getElementById('close-recap-btn');
     const timerDisplay = document.getElementById('recap-timer');
+    
+    // ... restlicher Code ...
+}
     
     // Sicherstellen, dass der Button zu Beginn wirklich gesperrt ist
     btn.disabled = true;
