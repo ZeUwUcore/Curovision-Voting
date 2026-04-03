@@ -216,56 +216,55 @@
     }
 
     async function submitVoting() {
-        if(!confirm("Voting jetzt final absenden?")) return;
+    if(!confirm("Voting jetzt final absenden?")) return;
+    
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = "Speichere...";
+
+    try {
+        const items = document.querySelectorAll('.song-item');
+        const votesToUpload = [];
+        const voterName = document.getElementById('username').value;
+
+        // PUNKTE-LOGIK ANPASSEN
+        // Live: 15, 12, 10, 8, 7, 6, 5, 4, 3, 2
+        // Pre:  12, 10, 8, 7, 6, 5, 4, 3, 2, 1
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
         
-        const btn = document.getElementById('submit-btn');
-        btn.disabled = true;
-        btn.innerText = "Speichere...";
+        // Wähle die richtige Liste basierend auf dem Modus
+        const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
 
-        try {
-            // 1. Hole alle Ränge aus der Liste
-            const items = document.querySelectorAll('.song-item');
-            const votesToUpload = [];
-            const voterName = document.getElementById('username').value;
+        items.forEach((item, index) => {
+            const songId = item.getAttribute('data-id');
+            const points = pointsMap[index] || 0; // Holt Punktwert aus der gewählten Liste
 
-            items.forEach((item, index) => {
-                const songId = item.getAttribute('data-id');
-                const rank = index + 1;
-                // ESC Punkte-Logik: Platz 1 = 12, Platz 2 = 10, Platz 3 = 8, dann 7,6,5,4,3,2,1
-                const pointsMap = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-                const points = pointsMap[index] || 0;
-
-                votesToUpload.push({
-                    voter_name: voterName,
-                    id: songId,
-                    points: points,
-                    mode: currentMode
-                });
+            votesToUpload.push({
+                voter_name: voterName,
+                song_id: songId, // WICHTIG: Hier auch direkt die Korrektur auf song_id
+                points: points,
+                mode: currentMode
             });
+        });
 
-            // 2. In die Tabelle 'single_votes' schreiben
-            const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
-            if(voteError) throw voteError;
+        // Rest der Funktion (Supabase Insert & Status Update) bleibt gleich...
+        const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
+        if(voteError) throw voteError;
 
-            // 3. WICHTIG: vote_status auf 'yes' setzen, damit kein zweites Mal abgestimmt werden kann
-            if(currentMode === 'pre' && loggedInUserId) {
-                const { error: statusError } = await supabaseClient
-                    .from('participants')
-                    .update({ vote_status: 'yes' })
-                    .eq('id', loggedInUserId);
-                if(statusError) throw statusError;
-            }
-
-            alert("Dein Voting wurde erfolgreich gespeichert!");
-            location.reload();
-
-        } catch (err) {
-            console.error(err);
-            alert("Fehler beim Speichern: " + err.message);
-            btn.disabled = false;
-            btn.innerText = "Voting final absenden";
+        if(currentMode === 'pre' && loggedInUserId) {
+            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
         }
+
+        alert("Dein Voting wurde erfolgreich gespeichert!");
+        location.reload();
+
+    } catch (err) {
+        console.error(err);
+        alert("Fehler: " + err.message);
+        btn.disabled = false;
     }
+}
 
     initApp();
 </script>
