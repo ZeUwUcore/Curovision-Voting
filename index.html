@@ -76,161 +76,149 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let currentMode = '';
-        let loggedInUserId = null;
-        const ptsPre = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        const ptsLive = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+    let currentMode = '';
+    let loggedInUserId = null;
+    const ptsLive = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0]; // Erweitert für Sicherheit
 
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
         }
-        
-        async function initApp() {
-            const { data, error } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
-            if (error) return;
-            currentMode = data.value;
-            document.getElementById('status-dot').style.backgroundColor = "#00ff88";
-            document.getElementById('status-text').innerText = "Bereit (" + currentMode.toUpperCase() + ")";
-            document.getElementById('mode-title').innerText = currentMode === 'pre' ? "PRE-VOTING" : "LIVE-VOTING";
-            if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
-        }
-
-        async function startVoting() {
-            const name = document.getElementById('username').value;
-            if(!name) return alert("Bitte Namen eingeben!");
-
-            if(currentMode === 'pre') {
-                const pass = document.getElementById('userpassword').value;
-                const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
-                if (!data || error) return alert("Login-Daten nicht korrekt!");
-                if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
-                loggedInUserId = data.id;
-            }
-
-            document.getElementById('login-area').classList.add('hidden');
-            document.getElementById('voting-area').classList.remove('hidden');
-            document.getElementById('display-name').innerText = name;
-            loadSongs();
-        }
-
-        async function loadSongs() {
-    // ... (vorheriger Code zum Laden von songs, votes und config bleibt gleich) ...
-    const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-    const eliminationCount = configData ? parseInt(configData.value) : 0;
-
-    // Rauswurf-Logik berechnen (um ausgeschiedene IDs zu erhalten)
-    // [Hier die Logik aus der vorherigen Antwort einfügen, um 'eliminatedIds' zu generieren]
-
-    let filtered = songs;
-    if (currentMode === 'pre') {
-        filtered = songs.filter(s => s.id !== loggedInUserId);
-    } else {
-        // Im Live-Voting: Rausgeflogene Songs (eliminatedIds) entfernen
-        filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
+        return array;
     }
 
-    filtered = shuffleArray(filtered);
-    const list = document.getElementById('song-list');
-    list.innerHTML = '';
-    
-    filtered.forEach((s, i) => {
-        const item = document.createElement('div');
-        item.className = 'song-item';
-        item.setAttribute('data-id', s.id);
-        
-        // LOGIK: Pre-Voting = Rang | Live-Voting = Punkte
-        const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
+    async function initApp() {
+        const { data, error } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
+        if (error) return;
+        currentMode = data.value;
+        document.getElementById('status-dot').style.backgroundColor = "#00ff88";
+        document.getElementById('status-text').innerText = "Bereit (" + currentMode.toUpperCase() + ")";
+        document.getElementById('mode-title').innerText = currentMode === 'pre' ? "PRE-VOTING" : "LIVE-VOTING";
+        if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
+    }
 
-        item.innerHTML = `
-            <span class="rank-number">${i+1}</span>
-            <div class="song-info">
-                <strong>${s.title}</strong>
-                <small>${s.artist}</small>
-            </div>
-            <div class="points-badge">${badgeContent}</div>
-        `;
-        list.appendChild(item);
-    });
-    new Sortable(list, { animation: 150, onEnd: updateBadges });
-}
-
-function updateBadges() {
-    document.querySelectorAll('.song-item').forEach((item, i) => {
-        item.querySelector('.rank-number').innerText = i + 1;
-        // Auch beim Verschieben aktualisieren:
-        const badge = item.querySelector('.points-badge');
-        if (currentMode === 'pre') {
-            badge.innerText = `Rang ${i + 1}`;
-        } else {
-            badge.innerText = `+${ptsLive[i] || 0} P.`;
+    async function startVoting() {
+        const name = document.getElementById('username').value;
+        if(!name) return alert("Bitte Namen eingeben!");
+        if(currentMode === 'pre') {
+            const pass = document.getElementById('userpassword').value;
+            const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+            if (!data || error) return alert("Login-Daten nicht korrekt!");
+            if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
+            loggedInUserId = data.id;
         }
-    });
-}
+        document.getElementById('login-area').classList.add('hidden');
+        document.getElementById('voting-area').classList.remove('hidden');
+        document.getElementById('display-name').innerText = name;
+        loadSongs();
+    }
 
-        async function submitVoting() {
-    if (!confirm("Voting jetzt final absenden?")) return;
+    async function loadSongs() {
+        // 1. Daten laden
+        const { data: songs } = await supabaseClient.from('songs').select('*');
+        const { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
+        const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+        const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-    btn.innerText = "Übermittle...";
-    const items = document.querySelectorAll('.song-item');
-    const voterName = document.getElementById('username').value;
-
-    try {
-        const votesToUpload = [];
-        const escPoints = currentMode === 'pre' ? [12, 10, 8, 7, 6, 5, 4, 3, 2, 1] : [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-
-        for (let i = 0; i < items.length; i++) {
-            const sId = items[i].getAttribute('data-id');
-            const addedPts = escPoints[i] || 0; // Jeder bekommt Punkte nach Rang
-
-            votesToUpload.push({
-                id: sId, 
-                voter_name: voterName,
-                points: addedPts,
-                mode: currentMode
-            });
-
-            // Update der results Tabelle
-            const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
-            if (row) {
-                let updates = {};
-                if (currentMode === 'pre') {
-                    updates.points_pre = (row.points_pre || 0) + addedPts;
-                    updates.points_live = row.points_live || 0; 
-                } else {
-                    updates.points_live = (row.points_live || 0) + addedPts;
-                    updates.points_pre = row.points_pre || 0;
+        // 2. Rauswurf-IDs berechnen (identisch zu Admin-Seite)
+        const virtualPoints = {};
+        songs.forEach(s => virtualPoints[Number(s.id)] = 0);
+        const voterGroups = votes.reduce((acc, v) => {
+            if (!acc[v.voter_name]) acc[v.voter_name] = [];
+            acc[v.voter_name].push(v);
+            return acc;
+        }, {});
+        const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+        Object.values(voterGroups).forEach(userVotes => {
+            userVotes.sort((a, b) => b.points - a.points);
+            let pointer = 0;
+            userVotes.forEach(v => {
+                const s = songs.find(x => Number(x.id) === Number(v.id));
+                if (s && s.qualified !== 'yes' && pointer < escPoints.length) {
+                    virtualPoints[Number(v.id)] += escPoints[pointer];
+                    pointer++;
                 }
-                updates.points_all = (updates.points_pre || 0) + (updates.points_live || 0);
-                await supabaseClient.from('results').update(updates).eq('id', sId);
-            }
+            });
+        });
+        const eliminatedIds = Object.keys(virtualPoints)
+            .filter(id => {
+                const s = songs.find(x => Number(x.id) === Number(id));
+                return s && s.qualified !== 'yes';
+            })
+            .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+            .sort((a, b) => a.pts - b.pts)
+            .slice(0, eliminationCount)
+            .map(l => l.id);
+
+        // 3. Filtern & Mischen
+        let filtered = [];
+        if (currentMode === 'pre') {
+            filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+        } else {
+            filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
         }
+        filtered = shuffleArray(filtered);
 
-        const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
-        if (voteErr) throw voteErr;
-
-        if (currentMode === 'pre' && loggedInUserId) {
-            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-        }
-
-        alert("Erfolgreich gespeichert!");
-        location.reload();
-    } catch (err) {
-        console.error(err);
-        alert("Fehler: " + err.message);
-        btn.disabled = false;
+        // 4. Anzeigen
+        const list = document.getElementById('song-list');
+        list.innerHTML = '';
+        filtered.forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
+            const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
+            item.innerHTML = `
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info"><strong>${s.title}</strong><small>${s.artist}</small></div>
+                <div class="points-badge">${badgeContent}</div>
+            `;
+            list.appendChild(item);
+        });
+        new Sortable(list, { animation: 150, onEnd: updateBadges });
     }
-}
-        initApp();
-    </script>
+
+    function updateBadges() {
+        document.querySelectorAll('.song-item').forEach((item, i) => {
+            item.querySelector('.rank-number').innerText = i + 1;
+            const badge = item.querySelector('.points-badge');
+            badge.innerText = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
+        });
+    }
+
+    async function submitVoting() {
+        if (!confirm("Voting jetzt final absenden?")) return;
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        const items = document.querySelectorAll('.song-item');
+        const voterName = document.getElementById('username').value;
+        try {
+            const escPoints = currentMode === 'pre' ? [12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0] : [15, 10, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0];
+            const votesToUpload = [];
+            for (let i = 0; i < items.length; i++) {
+                const sId = items[i].getAttribute('data-id');
+                const addedPts = escPoints[i] || 0;
+                votesToUpload.push({ id: sId, voter_name: voterName, points: addedPts, mode: currentMode });
+                const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
+                if (row) {
+                    let updates = { points_pre: row.points_pre || 0, points_live: row.points_live || 0 };
+                    if (currentMode === 'pre') updates.points_pre += addedPts;
+                    else updates.points_live += addedPts;
+                    updates.points_all = updates.points_pre + updates.points_live;
+                    await supabaseClient.from('results').update(updates).eq('id', sId);
+                }
+            }
+            await supabaseClient.from('single_votes').insert(votesToUpload);
+            if (currentMode === 'pre' && loggedInUserId) await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+            alert("Erfolgreich gespeichert!");
+            location.reload();
+        } catch (err) { alert("Fehler: " + err.message); btn.disabled = false; }
+    }
+    initApp();
+</script>
 </body>
 </html>
