@@ -55,6 +55,10 @@
         <div class="leaderboard"><table id="table-all"></table></div>
     </div>
 
+    <div id="debug-info" style="background: rgba(255,255,0,0.1); border: 1px dashed yellow; padding: 10px; margin-bottom: 20px; font-size: 12px; color: yellow;">
+    <strong>Debug-Check:</strong> <span id="debug-status">Warte auf Daten...</span>
+    </div>
+    
     <script>
         const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
@@ -98,25 +102,27 @@
         const { data: votes } = await supabaseClient.from('single_votes').select('*');
         const { data: songs } = await supabaseClient.from('songs').select('*');
         const { data: results } = await supabaseClient.from('results').select('*');
-        
-        // Hier holen wir die Zahl aus deiner Config-Tabelle
         const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+        
         const eliminationCount = configData ? parseInt(configData.value) : 0;
+        const debugStatus = document.getElementById('debug-status');
 
         const songMap = {};
         songs.forEach(s => {
-            songMap[s.id] = { 
+            // Wir stellen sicher, dass die ID eine Zahl ist
+            songMap[Number(s.id)] = { 
                 display: `${s.title} (${s.artist})`, 
                 flag: s.country ? s.country.toLowerCase() : null,
-                qualified: s.qualified || 'no' 
+                qualified: String(s.qualified).toLowerCase().trim() // Sicherheit gegen Leerzeichen
             };
         });
 
-        // --- SCHATTEN-LOGIK FÜR RAUSWURF ---
+        // --- SCHATTEN-LOGIK ---
         const virtualPoints = {}; 
-        results.forEach(r => virtualPoints[r.id] = 0);
+        results.forEach(r => virtualPoints[Number(r.id)] = 0);
 
-        const voterGroups = votes.filter(v => v.mode === 'pre').reduce((acc, v) => {
+        const preVotes = votes.filter(v => v.mode === 'pre');
+        const voterGroups = preVotes.reduce((acc, v) => {
             if (!acc[v.voter_name]) acc[v.voter_name] = [];
             acc[v.voter_name].push(v);
             return acc;
@@ -125,34 +131,33 @@
         const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
 
         Object.values(voterGroups).forEach(userVotes => {
-            // Sortiere nach den tatsächlich vergebenen Punkten (Rangfolge des Nutzers)
             userVotes.sort((a, b) => b.points - a.points);
-            
             let pointer = 0;
             userVotes.forEach(v => {
-                // Nur Songs, die NICHT 'yes' bei qualified haben, rücken in der Punkteliste nach oben
-                if (songMap[v.id] && songMap[v.id].qualified !== 'yes' && pointer < escPoints.length) {
-                    virtualPoints[v.id] += escPoints[pointer];
+                const sId = Number(v.id);
+                if (songMap[sId] && songMap[sId].qualified !== 'yes' && pointer < escPoints.length) {
+                    virtualPoints[sId] += escPoints[pointer];
                     pointer++;
                 }
             });
         });
 
-        // Wer sind die Verlierer der Schatten-Rechnung?
         const losers = Object.keys(virtualPoints)
-            .filter(id => songMap[id] && songMap[id].qualified !== 'yes')
-            .map(id => ({ id: parseInt(id), pts: virtualPoints[id] }))
-            .sort((a, b) => a.pts - b.pts); // Kleinste Punktzahl zuerst
+            .filter(id => songMap[Number(id)] && songMap[Number(id)].qualified !== 'yes')
+            .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+            .sort((a, b) => a.pts - b.pts);
         
-        // Hier greift dein elimination_count aus der Datenbank
         const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
+
+        // DEBUG ANZEIGE AKTUALISIEREN
+        debugStatus.innerHTML = `Elimination-Count: ${eliminationCount} | Rauswurf-IDs: ${eliminatedIds.join(', ') || 'Keine'}`;
 
         // --- RENDERING ---
         renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
         renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, []);
         renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
 
-        // Vote Cards wie gehabt
+        // Vote Cards
         const grouped = votes.reduce((acc, v) => {
             const key = `${v.voter_name}_${v.mode}`;
             if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
@@ -160,16 +165,14 @@
             return acc;
         }, {});
         
-        const preCont = document.getElementById('pre-container');
-        const liveCont = document.getElementById('live-container');
-        preCont.innerHTML = ''; liveCont.innerHTML = ''; // Container leeren vor neuem Render
-
+        document.getElementById('pre-container').innerHTML = '';
+        document.getElementById('live-container').innerHTML = '';
         renderVoteCards(Object.values(grouped), songMap);
 
         document.getElementById('loader').classList.add('hidden');
     } catch (err) {
         console.error("Admin-Fehler:", err);
-        document.getElementById('loader').innerText = "Fehler beim Laden!";
+        document.getElementById('debug-status').innerText = "FEHLER: " + err.message;
     }
 }
 function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
@@ -217,16 +220,33 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
             });
         }
 
-        function renderLeaderboard(tableId, sortedData, pointKey, songMap) {
-            const table = document.getElementById(tableId);
-            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th></tr>`;
-            sortedData.forEach((res, index) => {
-                const s = songMap[res.id];
-                const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-                const row = table.insertRow();
-                row.innerHTML = `<td>${index + 1}</td><td>${flagHtml}${s ? s.display : '...'}</td><td>${res[pointKey]}</td>`;
-            });
+        function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
+    const table = document.getElementById(tableId);
+    table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+    
+    sortedData.forEach((res, index) => {
+        const sId = Number(res.id); // Hier ID erzwingen
+        const s = songMap[sId];
+        if(!s) return;
+        
+        // Prüfung gegen die Liste der Zahlen
+        const isEliminated = eliminatedIds.includes(sId); 
+        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+        const row = table.insertRow();
+        
+        if (isEliminated) {
+            row.style.color = "#ff4d4d"; // Rot
+            row.style.fontWeight = "bold";
         }
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
+            <td>${res[pointKey]}</td>
+            <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ FINALIST" : "✅ WEITER")}</td>
+        `;
+    });
+}
     </script>
 </body>
 </html>
