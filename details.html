@@ -179,29 +179,36 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
     const table = document.getElementById(tableId);
     table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
     
-    sortedData.forEach((res, index) => {
-        const s = songMap[res.id];
+    // Zähler für die sichtbare Platzierung (#)
+    let visibleRank = 1;
+
+    sortedData.forEach((res) => {
+        const sId = Number(res.id);
+        const s = songMap[sId];
         if(!s) return;
         
-        const isEliminated = eliminatedIds.includes(res.id);
-        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+        const isEliminated = eliminatedIds.includes(sId);
         
+        if (tableId === 'table-live' && isEliminated) return;
+        if (tableId === 'table-all' && isEliminated) return;
+
+        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
         
         if (isEliminated) {
             row.style.color = "#ff4d4d";
-            row.style.opacity = "0.6";
+            row.style.opacity = "0.7";
         }
 
         row.innerHTML = `
-            <td>${index + 1}</td>
+            <td>${visibleRank}</td>
             <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
             <td>${res[pointKey]}</td>
             <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ FINALIST" : "✅ WEITER")}</td>
         `;
+        visibleRank++;
     });
 }
-
         function renderVoteCards(groups, songMap) {
             const preCont = document.getElementById('pre-container');
             const liveCont = document.getElementById('live-container');
