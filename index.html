@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Curovision Voting</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .container { background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 600px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: #00d2ff; letter-spacing: 2px; }
+        .header-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px; 
+            margin-bottom: 20px;
+        }
+
+        .title-logo {
+            height: 70px; 
+            width: auto;
+            object-fit: contain;
+        }
+
+        @media (max-width: 480px) {
+            .header-container { gap: 8px; }
+            .title-logo { height: 30px; }
+            h1 { font-size: 1.5em; }
+        }
+        .hidden { display: none; }
+        input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; background: white; color: #333; }
+        button { background: #00d2ff; color: #121212; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
+        button:hover { background: #00ff88; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #song-list { margin-top: 20px; text-align: left; }
+        .song-item { background: rgba(255, 255, 255, 0.1); margin: 8px 0; padding: 15px; border-radius: 10px; cursor: grab; display: flex; align-items: center; border-left: 5px solid #00d2ff; position: relative; }
+        .rank-number { margin-right: 15px; font-weight: bold; color: #00d2ff; width: 25px; }
+        .song-info { flex-grow: 1; }
+        .song-info strong { display: block; font-size: 1.1em; }
+        .song-info small { color: #ccc; }
+        .points-badge { position: absolute; right: 15px; color: #121212; font-weight: bold; padding: 5px 10px; border-radius: 5px; min-width: 40px; text-align: center; background: #00ff88; }
+        .fi { margin-right: 5px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div style="font-size: 12px; margin-bottom: 10px;">
+            <span id="status-dot" style="height: 10px; width: 10px; border-radius: 50%; display: inline-block; background-color: gray;"></span>
+            <span id="status-text">Initialisiere...</span>
+        </div>
+
+        <div class="header-container">
+            <img src="logo.png" alt="Logo" class="title-logo">
+            <h1>CUROVISION VOTING</h1>
+            <img src="logo.png" alt="Logo" class="title-logo">
+        </div>
+        
+        <div id="login-area">
+            <h3 id="mode-title">Lade...</h3>
+            <input type="text" id="username" placeholder="Dein Name">
+            <input type="password" id="userpassword" class="hidden" placeholder="Dein Passwort">
+            <br>
+            <button onclick="startVoting()">Anmelden</button>
+        </div>
+
+        <div id="voting-area" class="hidden">
+            <h3>Hallo <span id="display-name"></span>!</h3>
+            <p>Schiebe deine Favoriten auf die oberen Plätze:</p>
+            <div id="song-list"></div>
+            <button id="submit-btn" onclick="submitVoting()" style="background: #00ff88; margin-top: 30px; width: 100%;">Voting final absenden</button>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentMode = '';
+        let loggedInUserId = null;
+        const ptsPre = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+        const ptsLive = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+
+        async function initApp() {
+            const { data, error } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
+            if (error) return;
+            currentMode = data.value;
+            document.getElementById('status-dot').style.backgroundColor = "#00ff88";
+            document.getElementById('status-text').innerText = "Bereit (" + currentMode.toUpperCase() + ")";
+            document.getElementById('mode-title').innerText = currentMode === 'pre' ? "PRE-VOTING" : "LIVE-VOTING";
+            if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
+        }
+
+        async function startVoting() {
+            const name = document.getElementById('username').value;
+            if(!name) return alert("Bitte Namen eingeben!");
+
+            if(currentMode === 'pre') {
+                const pass = document.getElementById('userpassword').value;
+                const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+                if (!data || error) return alert("Login-Daten nicht korrekt!");
+                if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
+                loggedInUserId = data.id;
+            }
+
+            document.getElementById('login-area').classList.add('hidden');
+            document.getElementById('voting-area').classList.remove('hidden');
+            document.getElementById('display-name').innerText = name;
+            loadSongs();
+        }
+
+        async function loadSongs() {
+            const { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
+            const list = document.getElementById('song-list');
+            list.innerHTML = '';
+            
+            const filtered = songs.filter(s => currentMode !== 'pre' || s.id !== loggedInUserId);
+            
+            filtered.forEach((s, i) => {
+                const item = document.createElement('div');
+                item.className = 'song-item';
+                item.setAttribute('data-id', s.id);
+                const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+                
+                // Anzeige-Logik für Artist und Land/Flagge
+                let subline = s.artist;
+                if (currentMode === 'live' && s.country) {
+                    subline = `<span class="fi fi-${s.country.toLowerCase()}"></span> ${s.country.toUpperCase()} • ${s.artist}`;
+                }
+
+                item.innerHTML = `
+                    <span class="rank-number">${i+1}</span>
+                    <div class="song-info">
+                        <strong>${s.title}</strong>
+                        <small>${subline}</small>
+                    </div>
+                    <div class="points-badge">+${p} P.</div>
+                `;
+                list.appendChild(item);
+            });
+            new Sortable(list, { animation: 150, onEnd: updateBadges });
+        }
+
+        function updateBadges() {
+            document.querySelectorAll('.song-item').forEach((item, i) => {
+                item.querySelector('.rank-number').innerText = i + 1;
+                const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+                item.querySelector('.points-badge').innerText = "+" + p + " P.";
+            });
+        }
+
+        async function submitVoting() {
+    if (!confirm("Voting jetzt final absenden?")) return;
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = "Übermittle...";
+    const items = document.querySelectorAll('.song-item');
+    const voterName = document.getElementById('username').value;
+
+    try {
+        const votesToUpload = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const sId = items[i].getAttribute('data-id');
+            const addedPts = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+
+            votesToUpload.push({
+                id: sId, 
+                voter_name: voterName,
+                points: addedPts,
+                mode: currentMode
+            });
+
+            const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
+            
+            if (row) {
+                let updates = {};
+                if (currentMode === 'pre') {
+                    // NUR Pre ändern, Live-Wert aus der DB beibehalten
+                    updates.points_pre = (row.points_pre || 0) + addedPts;
+                    updates.points_live = row.points_live || 0; 
+                } else {
+                    // NUR Live ändern, Pre-Wert aus der DB beibehalten
+                    updates.points_live = (row.points_live || 0) + addedPts;
+                    updates.points_pre = row.points_pre || 0;
+                }
+                // Gesamtsumme neu berechnen
+                updates.points_all = updates.points_pre + updates.points_live;
+
+                await supabaseClient.from('results').update(updates).eq('id', sId);
+            }
+        }
+
+        const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
+        if (voteErr) throw voteErr;
+
+        if (currentMode === 'pre' && loggedInUserId) {
+            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+        }
+
+        alert("Erfolgreich gespeichert!");
+        location.reload();
+
+    } catch (err) {
+        console.error(err);
+        alert("Fehler: " + err.message);
+        btn.disabled = false;
+    }
+}
+        initApp();
+    </script>
+</body>
+</html>
