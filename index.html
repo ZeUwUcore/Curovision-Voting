@@ -9,30 +9,46 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
         /* Overlay für den Schnelldurchgang */
-.hidden { display: none !important; }
+        .hidden { display: none !important; }
         
-#recap-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.95);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    z-index: 1000; padding: 20px; text-align: center;
-}
-.video-placeholder {
-    width: 90%;
-    max-width: 800px;
-    aspect-ratio: 16 / 9;
-    background: #000;
-    border: 2px solid #00d2ff;
-    margin-bottom: 20px;
-    border-radius: 10px;
-    overflow: hidden; /* Damit das Video die abgerundeten Ecken nicht überlagert */
-}
-#close-recap-btn:disabled {
-    background: #555; color: #aaa; cursor: not-allowed;
-}
+        #recap-overlay {
+            position: fixed;
+            top: 0; left: 0; 
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 9999; 
+            padding: 20px; 
+            text-align: center;
+        }
+
+        #recap-video {
+            width: 90vw;
+            max-width: 1000px;
+            aspect-ratio: 16 / 9;
+            border: 2px solid #00d2ff;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.3);
+            margin: 20px 0;
+        }
+
+        #close-recap-btn {
+            background: #00ff88;
+            color: #121212;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: 0.3s;
+        }
+
+        #close-recap-btn:disabled {
+            background: #555; color: #aaa; cursor: not-allowed;
+        }
         
+        /* Basis-Styles */
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
         .container { background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 600px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h1 { color: #00d2ff; letter-spacing: 2px; }
@@ -54,12 +70,12 @@
             .header-container { gap: 8px; }
             .title-logo { height: 30px; }
             h1 { font-size: 1.5em; }
+            #recap-video { width: 95vw; }
         }
-        .hidden { display: none; }
+
         input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; background: white; color: #333; }
         button { background: #00d2ff; color: #121212; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
         button:hover { background: #00ff88; }
-        button:disabled { background: #555; cursor: not-allowed; }
         #song-list { margin-top: 20px; text-align: left; }
         .song-item { background: rgba(255, 255, 255, 0.1); margin: 8px 0; padding: 15px; border-radius: 10px; cursor: grab; display: flex; align-items: center; border-left: 5px solid #00d2ff; position: relative; }
         .rank-number { margin-right: 15px; font-weight: bold; color: #00d2ff; width: 25px; }
@@ -68,12 +84,11 @@
         .song-info small { color: #ccc; }
         .points-badge { position: absolute; right: 15px; color: #121212; font-weight: bold; padding: 5px 10px; border-radius: 5px; min-width: 40px; text-align: center; background: #00ff88; }
         .fi { margin-right: 5px; border-radius: 2px; }
+        .sortable-ghost { opacity: 0.4; background: #00d2ff; }
     </style>
 </head>
 <body>
 
-    
-    
     <div class="container">
         <div style="font-size: 12px; margin-bottom: 10px;">
             <span id="status-dot" style="height: 10px; width: 10px; border-radius: 50%; display: inline-block; background-color: gray;"></span>
@@ -102,20 +117,18 @@
         </div>
 
         <div id="recap-overlay" class="hidden">
-    <h1>🎬 SCHNELLDURCHGANG</h1>
-    <p>Bitte schau dir die Zusammenfassung an, bevor du abstimmst.</p>
+            <h1 style="margin-top: 0;">🎬 SCHNELLDURCHGANG</h1>
+            <p>Bitte schau dir die Zusammenfassung an, bevor du abstimmst.</p>
 
-    <div class="video-placeholder">
-        <iframe id="recap-video" width="100%" height="100%" src="" 
-                title="YouTube video player" frameborder="0" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                allowfullscreen></iframe>
-    </div>
+            <iframe id="recap-video" src="" 
+                    title="YouTube video player" frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowfullscreen></iframe>
 
-    <button id="close-recap-btn" onclick="closeRecap()" disabled>
-        Bitte warten... (<span id="recap-timer">30</span>s)
-    </button>
-    </div>
+            <button id="close-recap-btn" onclick="closeRecap()" disabled>
+                Bitte warten... (<span id="recap-timer">30</span>s)
+            </button>
+        </div>
     </div>
 
     <script>
@@ -125,7 +138,8 @@
 
     let currentMode = '';
     let loggedInUserId = null;
-    const ptsLive = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0]; // Erweitert für Sicherheit
+    let recapInterval;
+    let recapTimeLeft = 30;
 
     function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
@@ -145,161 +159,148 @@
         if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
     }
 
-    let recapTimeLeft = 30; 
-let recapInterval;
+    async function startVoting() {
+        const name = document.getElementById('username').value;
+        if(!name) return alert("Bitte Namen eingeben!");
 
-async function startVoting() {
-    const name = document.getElementById('username').value;
-    if(!name) return alert("Bitte Namen eingeben!");
+        if(currentMode === 'pre') {
+            const pass = document.getElementById('userpassword').value;
+            const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+            if (!data || error) return alert("Login-Daten nicht korrekt!");
+            if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
+            loggedInUserId = data.id;
+            
+            showRecap();
+        } else {
+            proceedToVoting(name);
+        }
+    }
 
-    if(currentMode === 'pre') {
-        const pass = document.getElementById('userpassword').value;
-        const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
-        if (!data || error) return alert("Login-Daten nicht korrekt!");
-        if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
-        loggedInUserId = data.id;
-        
-        showRecap(); // Ruft die unten stehende Funktion auf
-    } else {
+    function showRecap() {
+        const overlay = document.getElementById('recap-overlay');
+        const iframe = document.getElementById('recap-video');
+        const btn = document.getElementById('close-recap-btn');
+        const timerDisplay = document.getElementById('recap-timer');
+
+        iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1&mute=1";
+        overlay.classList.remove('hidden');
+
+        recapTimeLeft = 30;
+        btn.disabled = true;
+        btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
+
+        clearInterval(recapInterval);
+        recapInterval = setInterval(() => {
+            recapTimeLeft--;
+            timerDisplay.innerText = recapTimeLeft;
+
+            if (recapTimeLeft <= 0) {
+                clearInterval(recapInterval);
+                btn.disabled = false;
+                btn.innerText = "Verstanden! Zum Voting";
+            } else {
+                btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
+            }
+        }, 1000);
+    }
+
+    function closeRecap() {
+        document.getElementById('recap-overlay').classList.add('hidden');
+        document.getElementById('recap-video').src = ""; // Stop video
+        const name = document.getElementById('username').value;
         proceedToVoting(name);
     }
-}
 
-function showRecap() {
-    const overlay = document.getElementById('recap-overlay');
-    const iframe = document.getElementById('recap-video');
-    const btn = document.getElementById('close-recap-btn');
-    const timerDisplay = document.getElementById('recap-timer');
-
-    // Video-URL setzen (Autoplay & Mute)
-    if (iframe) {
-        iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1&mute=1";
+    function proceedToVoting(name) {
+        document.getElementById('login-area').classList.add('hidden');
+        document.getElementById('voting-area').classList.remove('hidden');
+        document.getElementById('display-name').innerText = name;
+        loadSongs();
     }
 
-    // Overlay anzeigen
-    overlay.classList.remove('hidden');
-
-    // Timer initialisieren
-    recapTimeLeft = 30;
-    btn.disabled = true;
-    btn.style.background = "#555";
-    btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
-
-    // Intervall starten
-    clearInterval(recapInterval); // Sicherheitshalber alte Intervalle löschen
-    recapInterval = setInterval(() => {
-        recapTimeLeft--;
-        timerDisplay.innerText = recapTimeLeft;
-
-        if (recapTimeLeft <= 0) {
-            clearInterval(recapInterval);
-            btn.disabled = false;
-            btn.innerText = "Verstanden! Zum Voting";
-            btn.style.background = "#00ff88";
-            btn.style.cursor = "pointer";
-        } else {
-            btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
-        }
-    }, 1000);
-}
-
-function closeRecap() {
-    document.getElementById('recap-overlay').classList.add('hidden');
-    const name = document.getElementById('username').value;
-    proceedToVoting(name);
-}
-
-function proceedToVoting(name) {
-    document.getElementById('login-area').classList.add('hidden');
-    document.getElementById('voting-area').classList.remove('hidden');
-    document.getElementById('display-name').innerText = name;
-    loadSongs();
-}
-
     async function loadSongs() {
-    const { data: songs } = await supabaseClient.from('songs').select('*');
-    const { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
-    const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-    const eliminationCount = configData ? parseInt(configData.value) : 0;
+        const { data: songs } = await supabaseClient.from('songs').select('*');
+        const { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
+        const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+        const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-    const virtualPoints = {};
-    songs.forEach(s => virtualPoints[Number(s.id)] = 0);
-    const voterGroups = votes.reduce((acc, v) => {
-        if (!acc[v.voter_name]) acc[v.voter_name] = [];
-        acc[v.voter_name].push(v);
-        return acc;
-    }, {});
-    const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-    Object.values(voterGroups).forEach(userVotes => {
-        userVotes.sort((a, b) => b.points - a.points);
-        let pointer = 0;
-        userVotes.forEach(v => {
-            const s = songs.find(x => Number(x.id) === Number(v.id));
-            if (s && s.qualified !== 'yes' && pointer < escPoints.length) {
-                virtualPoints[Number(v.id)] += escPoints[pointer];
-                pointer++;
-            }
-        });
-    });
-
-    const eliminatedIds = Object.keys(virtualPoints)
-        .filter(id => {
-            const s = songs.find(x => Number(x.id) === Number(id));
-            return s && s.qualified !== 'yes';
-        })
-        .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
-        .sort((a, b) => a.pts - b.pts)
-        .slice(0, eliminationCount)
-        .map(l => l.id);
-
-    let filtered = (currentMode === 'pre') 
-        ? songs.filter(s => Number(s.id) !== Number(loggedInUserId))
-        : songs.filter(s => !eliminatedIds.includes(Number(s.id)));
-    
-    filtered = shuffleArray(filtered);
-    const list = document.getElementById('song-list');
-    list.innerHTML = '';
-    
-    filtered.forEach((s, i) => {
-        const item = document.createElement('div');
-        item.className = 'song-item';
-        item.setAttribute('data-id', s.id);
-        const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
+        const virtualPoints = {};
+        songs.forEach(s => virtualPoints[Number(s.id)] = 0);
         
-        // Flagge sauber als HTML-Teil
-        const flagClass = s.country ? `fi fi-${s.country.toLowerCase()}` : '';
+        const voterGroups = (votes || []).reduce((acc, v) => {
+            if (!acc[v.voter_name]) acc[v.voter_name] = [];
+            acc[v.voter_name].push(v);
+            return acc;
+        }, {});
 
-        item.innerHTML = `
-            <span class="rank-number">${i+1}</span>
-            <div class="song-info">
-                <strong>${s.title}</strong>
-                <small><span class="${flagClass}"></span> ${s.artist}</small>
-            </div>
-            <div class="points-badge">${badgeContent}</div>
-        `;
-        list.appendChild(item);
-    });
-    // Sortable neu initialisieren
-    new Sortable(list, { 
-        animation: 150, 
-        ghostClass: 'sortable-ghost',
-        onEnd: updateBadges 
-    });
-}
+        const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+        Object.values(voterGroups).forEach(userVotes => {
+            userVotes.sort((a, b) => b.points - a.points);
+            let pointer = 0;
+            userVotes.forEach(v => {
+                const s = songs.find(x => Number(x.id) === Number(v.id));
+                if (s && s.qualified !== 'yes' && pointer < escPoints.length) {
+                    virtualPoints[Number(v.id)] += escPoints[pointer];
+                    pointer++;
+                }
+            });
+        });
+
+        const eliminatedIds = Object.keys(virtualPoints)
+            .filter(id => {
+                const s = songs.find(x => Number(x.id) === Number(id));
+                return s && s.qualified !== 'yes';
+            })
+            .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+            .sort((a, b) => a.pts - b.pts)
+            .slice(0, eliminationCount)
+            .map(l => l.id);
+
+        let filtered = (currentMode === 'pre') 
+            ? songs.filter(s => Number(s.id) !== Number(loggedInUserId))
+            : songs.filter(s => !eliminatedIds.includes(Number(s.id)));
+        
+        filtered = shuffleArray(filtered);
+        const list = document.getElementById('song-list');
+        list.innerHTML = '';
+        
+        filtered.forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
+            const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${[15,10,8,7,6,5,4,3,2,1][i] || 0} P.`;
+            const flagClass = s.country ? `fi fi-${s.country.toLowerCase()}` : '';
+
+            item.innerHTML = `
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info">
+                    <strong>${s.title}</strong>
+                    <small><span class="${flagClass}"></span> ${s.artist}</small>
+                </div>
+                <div class="points-badge">${badgeContent}</div>
+            `;
+            list.appendChild(item);
+        });
+
+        new Sortable(list, { 
+            animation: 150, 
+            ghostClass: 'sortable-ghost',
+            onEnd: updateBadges 
+        });
+    }
 
     function updateBadges() {
-    document.querySelectorAll('.song-item').forEach((item, i) => {
-        item.querySelector('.rank-number').innerText = i + 1;
-        const badge = item.querySelector('.points-badge');
-        if (currentMode === 'pre') {
-            badge.innerText = `Rang ${i + 1}`;
-        } else {
-            // Im Live-Voting die Punkte basierend auf dem neuen Index vergeben
-            const points = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-            badge.innerText = `+${points[i] || 0} P.`;
-        }
-    });
-}
+        const points = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+        document.querySelectorAll('.song-item').forEach((item, i) => {
+            item.querySelector('.rank-number').innerText = i + 1;
+            const badge = item.querySelector('.points-badge');
+            if (currentMode === 'pre') {
+                badge.innerText = `Rang ${i + 1}`;
+            } else {
+                badge.innerText = `+${points[i] || 0} P.`;
+            }
+        });
+    }
         
     async function submitVoting() {
         if (!confirm("Voting jetzt final absenden?")) return;
