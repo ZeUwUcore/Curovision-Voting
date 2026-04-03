@@ -201,22 +201,22 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
     table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
     
     let visibleRank = 1;
+    // Sicherstellen, dass alle IDs Zahlen sind für den Vergleich
+    const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
 
     sortedData.forEach((res) => {
         const sId = Number(res.id);
         const s = songMap[sId];
         if(!s) return;
         
-        // Wir prüfen IMMER gegen eliminatedIds, egal welche Tabelle
-        const isEliminated = eliminatedIds.includes(sId);
+        const isEliminated = cleanEliminatedIds.includes(sId);
         
-        // Wenn wir in der Live-Tabelle sind, blenden wir die Rausgeflogenen komplett aus
+        // CRITICAL FIX: Wenn wir in der Live-Tabelle sind, überspringe Rausgeflogene
         if (tableId === 'table-live' && isEliminated) return;
 
-        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
+        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         
-        // Status-Text Logik korrigiert
         let statusText = "✅ WEITER";
         if (isEliminated) {
             statusText = "❌ RAUS";
