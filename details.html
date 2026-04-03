@@ -23,7 +23,7 @@
         .leaderboard { background: rgba(255, 255, 255, 0.07); border-radius: 15px; overflow: hidden; margin-bottom: 30px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px; text-align: left; }
-        tr:nth-child(1) { color: #ffd700; font-weight: bold; }
+        tr:nth-child(2) { color: #ffd700; font-weight: bold; } /* Erster Platz (nach Header) */
     </style>
 </head>
 <body>
@@ -39,10 +39,6 @@
     <div id="main-content" class="container hidden">
         <h1>Curovision Results</h1>
         
-        <div id="debug-info" style="background: rgba(255,255,0,0.1); border: 1px dashed yellow; padding: 10px; margin-bottom: 20px; font-size: 12px; color: yellow; border-radius: 8px;">
-            <strong>Debug-Check:</strong> <span id="debug-status">Warte auf Daten...</span>
-        </div>
-
         <div id="loader" style="text-align: center; padding: 50px;">Lade Daten...</div>
         
         <h2 class="section-title">Pre-Voting Abgaben</h2>
@@ -94,7 +90,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                alert("Fehler beim Abrufen des Passworts.");
+                alert("Fehler beim Login.");
                 btn.innerText = "Freischalten";
                 btn.disabled = false;
             }
@@ -108,7 +104,6 @@
                 const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
                 
                 const eliminationCount = configData ? parseInt(configData.value) : 0;
-                const debugStatus = document.getElementById('debug-status');
 
                 const songMap = {};
                 songs.forEach(s => {
@@ -123,7 +118,7 @@
                 const virtualPoints = {}; 
                 results.forEach(r => virtualPoints[Number(r.id)] = 0);
 
-                const preVotes = votes.filter(v => v.mode === 'pre');
+                const preVotes = (votes || []).filter(v => v.mode === 'pre');
                 const voterGroups = preVotes.reduce((acc, v) => {
                     if (!acc[v.voter_name]) acc[v.voter_name] = [];
                     acc[v.voter_name].push(v);
@@ -151,16 +146,13 @@
                 
                 const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
 
-                debugStatus.innerHTML = `Elimination-Count: ${eliminationCount} | Rauswurf-IDs: ${eliminatedIds.join(', ') || 'Keine'}`;
-
-                // --- RENDERING (FIXED) ---
-                // WICHTIG: Hier wurde vorher [] statt eliminatedIds an table-live übergeben!
+                // --- RENDERING ---
                 renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
                 renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, eliminatedIds);
                 renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
 
                 // Vote Cards
-                const grouped = votes.reduce((acc, v) => {
+                const grouped = (votes || []).reduce((acc, v) => {
                     const key = `${v.voter_name}_${v.mode}`;
                     if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
                     acc[key].items.push(v);
@@ -174,7 +166,6 @@
                 document.getElementById('loader').classList.add('hidden');
             } catch (err) {
                 console.error("Admin-Fehler:", err);
-                document.getElementById('debug-status').innerText = "FEHLER: " + err.message;
             }
         }
 
@@ -190,58 +181,53 @@
                     const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
                     return `<div class="vote-item"><span>${flagHtml}${s ? s.display : 'Song #' + v.id}</span><b>${v.points} Pkt.</b></div>`;
                 }).join('');
-                card.innerHTML = `<h3>${group.name} (${group.mode})</h3>${itemsHtml}`;
+                card.innerHTML = `<h3>${group.name} (${group.mode.toUpperCase()})</h3>${itemsHtml}`;
                 if (group.mode === 'pre') preCont.appendChild(card);
                 else liveCont.appendChild(card);
             });
         }
 
         function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
-    const table = document.getElementById(tableId);
-    table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
-    
-    let visibleRank = 1;
-    const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
+            const table = document.getElementById(tableId);
+            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+            
+            let visibleRank = 1;
+            const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
 
-    sortedData.forEach((res) => {
-        const sId = Number(res.id);
-        const s = songMap[sId];
-        if(!s) return;
-        
-        const isEliminated = cleanEliminatedIds.includes(sId);
-        
-        // Live-Tabelle filtert Rausgeflogene komplett aus
-        if (tableId === 'table-live' && isEliminated) return;
+            sortedData.forEach((res) => {
+                const sId = Number(res.id);
+                const s = songMap[sId];
+                if(!s) return;
+                
+                const isEliminated = cleanEliminatedIds.includes(sId);
+                if (tableId === 'table-live' && isEliminated) return;
 
-        const row = table.insertRow();
-        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-        
-        let statusText = "✅ WEITER";
-        if (isEliminated) {
-            statusText = "❌ RAUS";
-            row.style.color = "#ff4d4d";
-            row.style.opacity = "0.7";
-        } else if (s.qualified === 'yes') {
-            statusText = "⭐ FINALIST";
+                const row = table.insertRow();
+                const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+                
+                let statusText = "✅ WEITER";
+                if (isEliminated) {
+                    statusText = "❌ RAUS";
+                    row.style.color = "#ff4d4d";
+                    row.style.opacity = "0.7";
+                } else if (s.qualified === 'yes') {
+                    statusText = "⭐ FINALIST";
+                }
+
+                let pointsDisplay = res[pointKey]; 
+                if (tableId === 'table-all' && res[pointKey] < 0) {
+                    pointsDisplay = `0 (${res[pointKey]})`;
+                }
+
+                row.innerHTML = `
+                    <td>${visibleRank}</td>
+                    <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
+                    <td style="font-weight: bold;">${pointsDisplay}</td>
+                    <td>${statusText}</td>
+                `;
+                visibleRank++;
+            });
         }
-
-        // --- NEUE LOGIK FÜR NEGATIVE PUNKTE ---
-        let pointsDisplay = res[pointKey]; // Standardwert
-        
-        // Nur in der Gesamt-Rangliste (table-all) negative Punkte abfangen
-        if (tableId === 'table-all' && res[pointKey] < 0) {
-            pointsDisplay = `0 (${res[pointKey]})`;
-        }
-
-        row.innerHTML = `
-            <td>${visibleRank}</td>
-            <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
-            <td style="font-weight: bold;">${pointsDisplay}</td>
-            <td>${statusText}</td>
-        `;
-        visibleRank++;
-    });
-}
     </script>
 </body>
 </html>
