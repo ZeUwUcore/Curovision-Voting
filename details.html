@@ -38,6 +38,11 @@
 
     <div id="main-content" class="container hidden">
         <h1>Curovision Results</h1>
+        
+        <div id="debug-info" style="background: rgba(255,255,0,0.1); border: 1px dashed yellow; padding: 10px; margin-bottom: 20px; font-size: 12px; color: yellow; border-radius: 8px;">
+            <strong>Debug-Check:</strong> <span id="debug-status">Warte auf Daten...</span>
+        </div>
+
         <div id="loader" style="text-align: center; padding: 50px;">Lade Daten...</div>
         
         <h2 class="section-title">Pre-Voting Abgaben</h2>
@@ -49,16 +54,14 @@
         <h1 style="margin-top: 80px;">Ranglisten</h1>
         <h2 class="section-title">1. Pre-Voting</h2>
         <div class="leaderboard"><table id="table-pre"></table></div>
-        <h2 class="section-title">2. Live-Voting</h2>
+        
+        <h2 class="section-title">2. Live-Voting (nur Qualifizierte)</h2>
         <div class="leaderboard"><table id="table-live"></table></div>
+        
         <h2 class="section-title">3. Gesamtergebnis</h2>
         <div class="leaderboard"><table id="table-all"></table></div>
     </div>
 
-    <div id="debug-info" style="background: rgba(255,255,0,0.1); border: 1px dashed yellow; padding: 10px; margin-bottom: 20px; font-size: 12px; color: yellow;">
-    <strong>Debug-Check:</strong> <span id="debug-status">Warte auf Daten...</span>
-    </div>
-    
     <script>
         const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
@@ -91,90 +94,89 @@
                 }
             } catch (err) {
                 console.error(err);
-                alert("Fehler beim Abrufen des Passworts. Stelle sicher, dass 'admin_password' in der Tabelle 'config' existiert.");
+                alert("Fehler beim Abrufen des Passworts.");
                 btn.innerText = "Freischalten";
                 btn.disabled = false;
             }
         }
 
-       async function fetchAllData() {
-    try {
-        const { data: votes } = await supabaseClient.from('single_votes').select('*');
-        const { data: songs } = await supabaseClient.from('songs').select('*');
-        const { data: results } = await supabaseClient.from('results').select('*');
-        const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-        
-        const eliminationCount = configData ? parseInt(configData.value) : 0;
-        const debugStatus = document.getElementById('debug-status');
+        async function fetchAllData() {
+            try {
+                const { data: votes } = await supabaseClient.from('single_votes').select('*');
+                const { data: songs } = await supabaseClient.from('songs').select('*');
+                const { data: results } = await supabaseClient.from('results').select('*');
+                const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+                
+                const eliminationCount = configData ? parseInt(configData.value) : 0;
+                const debugStatus = document.getElementById('debug-status');
 
-        const songMap = {};
-        songs.forEach(s => {
-            // Wir stellen sicher, dass die ID eine Zahl ist
-            songMap[Number(s.id)] = { 
-                display: `${s.title} (${s.artist})`, 
-                flag: s.country ? s.country.toLowerCase() : null,
-                qualified: String(s.qualified).toLowerCase().trim() // Sicherheit gegen Leerzeichen
-            };
-        });
+                const songMap = {};
+                songs.forEach(s => {
+                    songMap[Number(s.id)] = { 
+                        display: `${s.title} (${s.artist})`, 
+                        flag: s.country ? s.country.toLowerCase() : null,
+                        qualified: String(s.qualified).toLowerCase().trim()
+                    };
+                });
 
-        // --- SCHATTEN-LOGIK ---
-        const virtualPoints = {}; 
-        results.forEach(r => virtualPoints[Number(r.id)] = 0);
+                // --- ELIMINATION LOGIK ---
+                const virtualPoints = {}; 
+                results.forEach(r => virtualPoints[Number(r.id)] = 0);
 
-        const preVotes = votes.filter(v => v.mode === 'pre');
-        const voterGroups = preVotes.reduce((acc, v) => {
-            if (!acc[v.voter_name]) acc[v.voter_name] = [];
-            acc[v.voter_name].push(v);
-            return acc;
-        }, {});
+                const preVotes = votes.filter(v => v.mode === 'pre');
+                const voterGroups = preVotes.reduce((acc, v) => {
+                    if (!acc[v.voter_name]) acc[v.voter_name] = [];
+                    acc[v.voter_name].push(v);
+                    return acc;
+                }, {});
 
-        const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
 
-        Object.values(voterGroups).forEach(userVotes => {
-            userVotes.sort((a, b) => b.points - a.points);
-            let pointer = 0;
-            userVotes.forEach(v => {
-                const sId = Number(v.id);
-                if (songMap[sId] && songMap[sId].qualified !== 'yes' && pointer < escPoints.length) {
-                    virtualPoints[sId] += escPoints[pointer];
-                    pointer++;
-                }
-            });
-        });
+                Object.values(voterGroups).forEach(userVotes => {
+                    userVotes.sort((a, b) => b.points - a.points);
+                    let pointer = 0;
+                    userVotes.forEach(v => {
+                        const sId = Number(v.id);
+                        if (songMap[sId] && songMap[sId].qualified !== 'yes' && pointer < escPoints.length) {
+                            virtualPoints[sId] += escPoints[pointer];
+                            pointer++;
+                        }
+                    });
+                });
 
-        const losers = Object.keys(virtualPoints)
-            .filter(id => songMap[Number(id)] && songMap[Number(id)].qualified !== 'yes')
-            .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
-            .sort((a, b) => a.pts - b.pts);
-        
-        const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
+                const losers = Object.keys(virtualPoints)
+                    .filter(id => songMap[Number(id)] && songMap[Number(id)].qualified !== 'yes')
+                    .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+                    .sort((a, b) => a.pts - b.pts);
+                
+                const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
 
-        // DEBUG ANZEIGE AKTUALISIEREN
-        debugStatus.innerHTML = `Elimination-Count: ${eliminationCount} | Rauswurf-IDs: ${eliminatedIds.join(', ') || 'Keine'}`;
+                debugStatus.innerHTML = `Elimination-Count: ${eliminationCount} | Rauswurf-IDs: ${eliminatedIds.join(', ') || 'Keine'}`;
 
-        // --- RENDERING ---
-        renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
-        renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, []);
-        renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
+                // --- RENDERING (FIXED) ---
+                // WICHTIG: Hier wurde vorher [] statt eliminatedIds an table-live übergeben!
+                renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
+                renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, eliminatedIds);
+                renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
 
-        // Vote Cards
-        const grouped = votes.reduce((acc, v) => {
-            const key = `${v.voter_name}_${v.mode}`;
-            if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
-            acc[key].items.push(v);
-            return acc;
-        }, {});
-        
-        document.getElementById('pre-container').innerHTML = '';
-        document.getElementById('live-container').innerHTML = '';
-        renderVoteCards(Object.values(grouped), songMap);
+                // Vote Cards
+                const grouped = votes.reduce((acc, v) => {
+                    const key = `${v.voter_name}_${v.mode}`;
+                    if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
+                    acc[key].items.push(v);
+                    return acc;
+                }, {});
+                
+                document.getElementById('pre-container').innerHTML = '';
+                document.getElementById('live-container').innerHTML = '';
+                renderVoteCards(Object.values(grouped), songMap);
 
-        document.getElementById('loader').classList.add('hidden');
-    } catch (err) {
-        console.error("Admin-Fehler:", err);
-        document.getElementById('debug-status').innerText = "FEHLER: " + err.message;
-    }
-}
+                document.getElementById('loader').classList.add('hidden');
+            } catch (err) {
+                console.error("Admin-Fehler:", err);
+                document.getElementById('debug-status').innerText = "FEHLER: " + err.message;
+            }
+        }
 
         function renderVoteCards(groups, songMap) {
             const preCont = document.getElementById('pre-container');
@@ -194,47 +196,44 @@
             });
         }
 
-        // ... (Oben bleibt alles gleich bis zur Funktion renderLeaderboard) ...
+        function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
+            const table = document.getElementById(tableId);
+            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+            
+            let visibleRank = 1;
+            const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
 
-function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
-    const table = document.getElementById(tableId);
-    table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
-    
-    let visibleRank = 1;
-    // Sicherstellen, dass alle IDs Zahlen sind für den Vergleich
-    const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
+            sortedData.forEach((res) => {
+                const sId = Number(res.id);
+                const s = songMap[sId];
+                if(!s) return;
+                
+                const isEliminated = cleanEliminatedIds.includes(sId);
+                
+                // Live-Tabelle filtert Rausgeflogene komplett aus
+                if (tableId === 'table-live' && isEliminated) return;
 
-    sortedData.forEach((res) => {
-        const sId = Number(res.id);
-        const s = songMap[sId];
-        if(!s) return;
-        
-        const isEliminated = cleanEliminatedIds.includes(sId);
-        
-        // CRITICAL FIX: Wenn wir in der Live-Tabelle sind, überspringe Rausgeflogene
-        if (tableId === 'table-live' && isEliminated) return;
+                const row = table.insertRow();
+                const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+                
+                let statusText = "✅ WEITER";
+                if (isEliminated) {
+                    statusText = "❌ RAUS";
+                    row.style.color = "#ff4d4d";
+                    row.style.opacity = "0.7";
+                } else if (s.qualified === 'yes') {
+                    statusText = "⭐ FINALIST";
+                }
 
-        const row = table.insertRow();
-        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-        
-        let statusText = "✅ WEITER";
-        if (isEliminated) {
-            statusText = "❌ RAUS";
-            row.style.color = "#ff4d4d";
-            row.style.opacity = "0.7";
-        } else if (s.qualified === 'yes') {
-            statusText = "⭐ FINALIST";
+                row.innerHTML = `
+                    <td>${visibleRank}</td>
+                    <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
+                    <td>${res[pointKey]}</td>
+                    <td>${statusText}</td>
+                `;
+                visibleRank++;
+            });
         }
-
-        row.innerHTML = `
-            <td>${visibleRank}</td>
-            <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
-            <td>${res[pointKey]}</td>
-            <td>${statusText}</td>
-        `;
-        visibleRank++;
-    });
-}
     </script>
 </body>
 </html>
