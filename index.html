@@ -8,7 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
-        /* Overlay für den Schnelldurchgang - Vollbild & Zentriert */
         .hidden { display: none !important; }
         
         #recap-overlay {
@@ -31,7 +30,6 @@
             margin: 20px 0;
         }
 
-        /* Handle Styling für besseres Handy-Scrolling */
         .drag-handle {
             cursor: grab;
             margin-right: 15px;
@@ -44,13 +42,12 @@
         }
         .drag-handle:active { cursor: grabbing; }
 
-        /* Basis-Design */
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
         .container { background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 600px; text-align: center; }
         .header-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .title-logo { height: 60px; width: auto; }
         
-        input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; }
+        input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; color: black; }
         button { background: #00d2ff; color: #121212; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:disabled { background: #555; color: #aaa; }
 
@@ -145,7 +142,6 @@
         const overlay = document.getElementById('recap-overlay');
         const iframe = document.getElementById('recap-video');
         const btn = document.getElementById('close-recap-btn');
-        // Autoplay & Mute entfernt für Sound-Support (Browser-Abhängig)
         iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1";
         overlay.classList.remove('hidden');
         recapInterval = setInterval(() => {
@@ -174,49 +170,39 @@
     }
 
     async function loadSongs() {
-    const { data: songs } = await supabaseClient.from('songs').select('*');
-    const list = document.getElementById('song-list');
-    list.innerHTML = '';
-    
-    // Filtert im Pre-Voting den eigenen Song aus
-    let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
-    
-    // Zufällige Mischung für die Startansicht
-    filtered.sort(() => Math.random() - 0.5);
+        const { data: songs } = await supabaseClient.from('songs').select('*');
+        const list = document.getElementById('song-list');
+        list.innerHTML = '';
+        
+        let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+        filtered.sort(() => Math.random() - 0.5);
 
-    filtered.forEach((s, i) => {
-        const item = document.createElement('div');
-        item.className = 'song-item';
-        item.setAttribute('data-id', s.id);
+        filtered.forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
 
-        // FLAGGEN-LOGIK: Nur anzeigen, wenn NICHT Pre-Voting
-        let flagHtml = '';
-        if (currentMode !== 'pre' && s.country) {
-            flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
-        }
+            let flagHtml = '';
+            if (currentMode !== 'pre' && s.country) {
+                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
+            }
 
-        item.innerHTML = `
-            <div class="drag-handle">☰</div>
-            <span class="rank-number">${i+1}</span>
-            <div class="song-info">
-                <strong>${s.title}</strong>
-                <small>${flagHtml}${s.artist}</small>
-            </div>
-            <div class="points-badge">Rang ${i+1}</div>
-        `;
-        list.appendChild(item);
-    });
+            item.innerHTML = `
+                <div class="drag-handle">☰</div>
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info">
+                    <strong>${s.title}</strong>
+                    <small>${flagHtml}${s.artist}</small>
+                </div>
+                <div class="points-badge">Rang ${i+1}</div>
+            `;
+            list.appendChild(item);
+        });
 
-    new Sortable(list, { 
-        animation: 150, 
-        handle: '.drag-handle',
-        ghostClass: 'sortable-ghost',
-        onEnd: updateBadges 
-    });
-
+        // WICHTIG: Nur EIN Aufruf von Sortable!
         new Sortable(list, { 
             animation: 150, 
-            handle: '.drag-handle', // WICHTIG: Nur am Handle ziehbar
+            handle: '.drag-handle',
             ghostClass: 'sortable-ghost',
             onEnd: updateBadges 
         });
@@ -230,10 +216,55 @@
     }
 
     async function submitVoting() {
-        if(!confirm("Voting final absenden?")) return;
-        // Hier kommt deine Supabase-Speicherlogik rein
-        alert("Voting gespeichert!");
-        location.reload();
+        if(!confirm("Voting jetzt final absenden?")) return;
+        
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerText = "Speichere...";
+
+        try {
+            // 1. Hole alle Ränge aus der Liste
+            const items = document.querySelectorAll('.song-item');
+            const votesToUpload = [];
+            const voterName = document.getElementById('username').value;
+
+            items.forEach((item, index) => {
+                const songId = item.getAttribute('data-id');
+                const rank = index + 1;
+                // ESC Punkte-Logik: Platz 1 = 12, Platz 2 = 10, Platz 3 = 8, dann 7,6,5,4,3,2,1
+                const pointsMap = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                const points = pointsMap[index] || 0;
+
+                votesToUpload.push({
+                    voter_name: voterName,
+                    id: songId,
+                    points: points,
+                    mode: currentMode
+                });
+            });
+
+            // 2. In die Tabelle 'single_votes' schreiben
+            const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
+            if(voteError) throw voteError;
+
+            // 3. WICHTIG: vote_status auf 'yes' setzen, damit kein zweites Mal abgestimmt werden kann
+            if(currentMode === 'pre' && loggedInUserId) {
+                const { error: statusError } = await supabaseClient
+                    .from('participants')
+                    .update({ vote_status: 'yes' })
+                    .eq('id', loggedInUserId);
+                if(statusError) throw statusError;
+            }
+
+            alert("Dein Voting wurde erfolgreich gespeichert!");
+            location.reload();
+
+        } catch (err) {
+            console.error(err);
+            alert("Fehler beim Speichern: " + err.message);
+            btn.disabled = false;
+            btn.innerText = "Voting final absenden";
+        }
     }
 
     initApp();
