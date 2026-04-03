@@ -8,6 +8,26 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
+        /* Overlay für den Schnelldurchgang */
+#recap-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 1000; padding: 20px; text-align: center;
+}
+.video-placeholder {
+    width: 100%; max-width: 800px;
+    aspect-ratio: 16 / 9;
+    background: #000; border: 2px solid #00d2ff;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px; border-radius: 10px;
+}
+#close-recap-btn:disabled {
+    background: #555; color: #aaa; cursor: not-allowed;
+}
+        
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
         .container { background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 600px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h1 { color: #00d2ff; letter-spacing: 2px; }
@@ -47,6 +67,19 @@
 </head>
 <body>
 
+    <div id="recap-overlay" class="hidden">
+    <h1>🎬 SCHNELLDURCHGANG</h1>
+    <p>Bitte schau dir die Zusammenfassung an, bevor du abstimmst.</p>
+    
+    <div class="video-placeholder">
+        <p style="color: #00d2ff;">[ HIER VIDEO-PLAYER EINFÜGEN ]</p>
+    </div>
+
+    <button id="close-recap-btn" onclick="closeRecap()" disabled>
+        Bitte warten... (<span id="recap-timer">30</span>s)
+    </button>
+    </div>
+    
     <div class="container">
         <div style="font-size: 12px; margin-bottom: 10px;">
             <span id="status-dot" style="height: 10px; width: 10px; border-radius: 50%; display: inline-block; background-color: gray;"></span>
@@ -102,21 +135,57 @@
         if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
     }
 
-    async function startVoting() {
-        const name = document.getElementById('username').value;
-        if(!name) return alert("Bitte Namen eingeben!");
-        if(currentMode === 'pre') {
-            const pass = document.getElementById('userpassword').value;
-            const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
-            if (!data || error) return alert("Login-Daten nicht korrekt!");
-            if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
-            loggedInUserId = data.id;
-        }
-        document.getElementById('login-area').classList.add('hidden');
-        document.getElementById('voting-area').classList.remove('hidden');
-        document.getElementById('display-name').innerText = name;
-        loadSongs();
+    let recapTimeLeft = 30; // Sekunden, die man schauen MUSS (hier anpassen)
+let recapInterval;
+
+async function startVoting() {
+    const name = document.getElementById('username').value;
+    if(!name) return alert("Bitte Namen eingeben!");
+
+    if(currentMode === 'pre') {
+        const pass = document.getElementById('userpassword').value;
+        const { data, error } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+        if (!data || error) return alert("Login-Daten nicht korrekt!");
+        if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
+        loggedInUserId = data.id;
+        
+        // ZEIGE RECAP NUR IM PRE-VOTING
+        showRecap();
+    } else {
+        // Im Live-Voting direkt zum Voting (oder auch Recap, falls gewünscht)
+        proceedToVoting(name);
     }
+}
+
+function showRecap() {
+    document.getElementById('recap-overlay').classList.remove('hidden');
+    recapTimeLeft = 30; // Dauer des Schnelldurchgangs in Sekunden
+    
+    recapInterval = setInterval(() => {
+        recapTimeLeft--;
+        document.getElementById('recap-timer').innerText = recapTimeLeft;
+        
+        if (recapTimeLeft <= 0) {
+            clearInterval(recapInterval);
+            const btn = document.getElementById('close-recap-btn');
+            btn.disabled = false;
+            btn.innerText = "Verstanden! Zum Voting";
+        }
+    }, 1000);
+}
+
+function closeRecap() {
+    document.getElementById('recap-overlay').classList.add('hidden');
+    const name = document.getElementById('username').value;
+    proceedToVoting(name);
+}
+
+function proceedToVoting(name) {
+    document.getElementById('login-area').classList.add('hidden');
+    document.getElementById('voting-area').classList.remove('hidden');
+    document.getElementById('display-name').innerText = name;
+    loadSongs();
+}
 
     async function loadSongs() {
     const { data: songs } = await supabaseClient.from('songs').select('*');
