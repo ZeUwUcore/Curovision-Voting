@@ -237,42 +237,51 @@ async function submitVoting() {
         const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
         const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
 
-        // Schritt 1: Einzelstimmen vorbereiten und RESULTS Tabelle updaten
-        for (const [index, item] of items.entries()) {
+        // Wir nutzen eine Schleife für die Updates
+        for (let index = 0; index < items.length; index++) {
+            const item = items[index];
             const songId = item.getAttribute('data-id');
             const points = pointsMap[index] || 0;
 
+            // 1. Daten für single_votes sammeln
+            // WICHTIG: Wenn deine Spalte in der DB 'song_id' heißt, ändere 'id:' unten in 'song_id:'
             votesToUpload.push({
                 voter_name: voterName,
-                id: songId, // Prüfe ob diese Spalte in Supabase existiert!
+                id: songId, // <--- PRÜFEN: Heißt die Spalte in single_votes wirklich 'id'?
                 points: points,
                 mode: currentMode
             });
 
-            // Schritt 2: Update der 'results' Tabelle, damit die Balken wachsen
-            const pointColumn = (currentMode === 'live') ? 'live_points' : 'pre_points';
+            // 2. Update der 'results' Tabelle
+            // Bestimme die Spalte: In deiner Admin-Datei heißt sie points_pre / points_live
+            const pointColumn = (currentMode === 'live') ? 'points_live' : 'points_pre';
             
             // Aktuellen Stand holen
-            const { data: currentRes } = await supabaseClient
+            const { data: currentRes, error: fetchError } = await supabaseClient
                 .from('results')
                 .select(pointColumn)
-                .eq('id', songId)
+                .eq('id', songId) // Hier ist 'id' korrekt, da es die Song-ID ist
                 .single();
 
-            const newTotal = (currentRes ? currentRes[pointColumn] : 0) + points;
+            if (fetchError) console.error("Fehler beim Holen der Ergebnisse für ID " + songId, fetchError);
 
-            // Neuen Stand schreiben
-            await supabaseClient
+            const oldPoints = currentRes ? (currentRes[pointColumn] || 0) : 0;
+            const newTotal = oldPoints + points;
+
+            // Neuen Stand in 'results' schreiben
+            const { error: updateError } = await supabaseClient
                 .from('results')
                 .update({ [pointColumn]: newTotal })
                 .eq('id', songId);
+
+            if (updateError) throw updateError;
         }
 
-        // Schritt 3: Alle Stimmen in 'single_votes' eintragen
+        // 3. Alle Einzelstimmen in 'single_votes' eintragen
         const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
         if(voteError) throw voteError;
 
-        // Schritt 4: Teilnehmer als "abgestimmt" markieren
+        // 4. Teilnehmer sperren
         if(currentMode === 'pre' && loggedInUserId) {
             await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
         }
@@ -281,13 +290,12 @@ async function submitVoting() {
         location.reload();
 
     } catch (err) {
-        console.error(err);
-        alert("Fehler beim Speichern: " + err.message);
+        console.error("Vollständiger Fehler-Stack:", err);
+        alert("Fehler beim Speichern: " + (err.message || "Unbekannter Datenbankfehler"));
         btn.disabled = false;
         btn.innerText = "Voting final absenden";
     }
 }
-
     initApp();
 </script>
 </body>
