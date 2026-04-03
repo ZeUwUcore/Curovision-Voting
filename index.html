@@ -85,6 +85,14 @@
         const ptsPre = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
         const ptsLive = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
 
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+        
         async function initApp() {
             const { data, error } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
             if (error) return;
@@ -114,7 +122,10 @@
         }
 
         async function loadSongs() {
-            const { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
+            let { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
+            if (songs) {
+                songs = shuffleArray(songs);
+            }    
             const list = document.getElementById('song-list');
             list.innerHTML = '';
             
