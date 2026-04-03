@@ -170,52 +170,58 @@
     }
 
     async function loadSongs() {
-        const { data: songs } = await supabaseClient.from('songs').select('*');
-        const list = document.getElementById('song-list');
-        list.innerHTML = '';
-        
-        let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
-        filtered.sort(() => Math.random() - 0.5);
+    const { data: songs } = await supabaseClient.from('songs').select('*');
+    const list = document.getElementById('song-list');
+    list.innerHTML = '';
+    
+    let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+    filtered.sort(() => Math.random() - 0.5);
 
-        filtered.forEach((s, i) => {
-            const item = document.createElement('div');
-            item.className = 'song-item';
-            item.setAttribute('data-id', s.id);
+    filtered.forEach((s, i) => {
+        const item = document.createElement('div');
+        item.className = 'song-item';
+        item.setAttribute('data-id', s.id);
 
-            let flagHtml = '';
-            if (currentMode !== 'pre' && s.country) {
-                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
-            }
+        let flagHtml = '';
+        if (currentMode !== 'pre' && s.country) {
+            flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
+        }
 
-            item.innerHTML = `
-                <div class="drag-handle">☰</div>
-                <span class="rank-number">${i+1}</span>
-                <div class="song-info">
-                    <strong>${s.title}</strong>
-                    <small>${flagHtml}${s.artist}</small>
-                </div>
-                <div class="points-badge">Rang ${i+1}</div>
-            `;
-            list.appendChild(item);
-        });
+        // UNTERSCHIEDLICHE ANZEIGE: Pre-Voting zeigt Rang, Live-Voting zeigt Punkte
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
 
-        // WICHTIG: Nur EIN Aufruf von Sortable!
-        new Sortable(list, { 
-            animation: 150, 
-            handle: '.drag-handle',
-            ghostClass: 'sortable-ghost',
-            onEnd: updateBadges 
-        });
-    }
+        item.innerHTML = `
+            <div class="drag-handle">☰</div>
+            <span class="rank-number">${i+1}</span>
+            <div class="song-info">
+                <strong>${s.title}</strong>
+                <small>${flagHtml}${s.artist}</small>
+            </div>
+            <div class="points-badge">${displayLabel}</div>
+        `;
+        list.appendChild(item);
+    });
 
-    function updateBadges() {
-        document.querySelectorAll('.song-item').forEach((item, i) => {
-            item.querySelector('.rank-number').innerText = i + 1;
-            item.querySelector('.points-badge').innerText = `Rang ${i + 1}`;
-        });
-    }
+    new Sortable(list, { 
+        animation: 150, 
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        onEnd: updateBadges 
+    });
+}
 
-    async function submitVoting() {
+function updateBadges() {
+    const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+    document.querySelectorAll('.song-item').forEach((item, i) => {
+        item.querySelector('.rank-number').innerText = i + 1;
+        // Auch hier beim Verschieben die Anzeige aktualisieren
+        const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+        item.querySelector('.points-badge').innerText = displayLabel;
+    });
+}
+
+async function submitVoting() {
     if(!confirm("Voting jetzt final absenden?")) return;
     
     const btn = document.getElementById('submit-btn');
@@ -227,42 +233,58 @@
         const votesToUpload = [];
         const voterName = document.getElementById('username').value;
 
-        // PUNKTE-LOGIK ANPASSEN
-        // Live: 15, 12, 10, 8, 7, 6, 5, 4, 3, 2
-        // Pre:  12, 10, 8, 7, 6, 5, 4, 3, 2, 1
         const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
         const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        
-        // Wähle die richtige Liste basierend auf dem Modus
         const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
 
-        items.forEach((item, index) => {
+        // Schritt 1: Einzelstimmen vorbereiten und RESULTS Tabelle updaten
+        for (const [index, item] of items.entries()) {
             const songId = item.getAttribute('data-id');
-            const points = pointsMap[index] || 0; // Holt Punktwert aus der gewählten Liste
+            const points = pointsMap[index] || 0;
 
             votesToUpload.push({
                 voter_name: voterName,
-                song_id: songId, // WICHTIG: Hier auch direkt die Korrektur auf song_id
+                id: songId, // Prüfe ob diese Spalte in Supabase existiert!
                 points: points,
                 mode: currentMode
             });
-        });
 
-        // Rest der Funktion (Supabase Insert & Status Update) bleibt gleich...
+            // Schritt 2: Update der 'results' Tabelle, damit die Balken wachsen
+            const pointColumn = (currentMode === 'live') ? 'live_points' : 'pre_points';
+            
+            // Aktuellen Stand holen
+            const { data: currentRes } = await supabaseClient
+                .from('results')
+                .select(pointColumn)
+                .eq('id', songId)
+                .single();
+
+            const newTotal = (currentRes ? currentRes[pointColumn] : 0) + points;
+
+            // Neuen Stand schreiben
+            await supabaseClient
+                .from('results')
+                .update({ [pointColumn]: newTotal })
+                .eq('id', songId);
+        }
+
+        // Schritt 3: Alle Stimmen in 'single_votes' eintragen
         const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
         if(voteError) throw voteError;
 
+        // Schritt 4: Teilnehmer als "abgestimmt" markieren
         if(currentMode === 'pre' && loggedInUserId) {
             await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
         }
 
-        alert("Dein Voting wurde erfolgreich gespeichert!");
+        alert("Erfolgreich abgesendet!");
         location.reload();
 
     } catch (err) {
         console.error(err);
-        alert("Fehler: " + err.message);
+        alert("Fehler beim Speichern: " + err.message);
         btn.disabled = false;
+        btn.innerText = "Voting final absenden";
     }
 }
 
