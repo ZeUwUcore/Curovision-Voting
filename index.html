@@ -20,11 +20,14 @@
     z-index: 1000; padding: 20px; text-align: center;
 }
 .video-placeholder {
-    width: 100%; max-width: 800px;
+    width: 90%;
+    max-width: 800px;
     aspect-ratio: 16 / 9;
-    background: #000; border: 2px solid #00d2ff;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 20px; border-radius: 10px;
+    background: #000;
+    border: 2px solid #00d2ff;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    overflow: hidden; /* Damit das Video die abgerundeten Ecken nicht überlagert */
 }
 #close-recap-btn:disabled {
     background: #555; color: #aaa; cursor: not-allowed;
@@ -105,6 +108,22 @@
             <div id="song-list"></div>
             <button id="submit-btn" onclick="submitVoting()" style="background: #00ff88; margin-top: 30px; width: 100%;">Voting final absenden</button>
         </div>
+
+        <div id="recap-overlay" class="hidden">
+    <h1>🎬 SCHNELLDURCHGANG</h1>
+    <p>Bitte schau dir die Zusammenfassung an, bevor du abstimmst.</p>
+
+    <div class="video-placeholder">
+        <iframe id="recap-video" width="100%" height="100%" src="" 
+                title="YouTube video player" frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                allowfullscreen></iframe>
+    </div>
+
+    <button id="close-recap-btn" onclick="closeRecap()" disabled>
+        Bitte warten... (<span id="recap-timer">30</span>s)
+    </button>
+    </div>
     </div>
 
     <script>
