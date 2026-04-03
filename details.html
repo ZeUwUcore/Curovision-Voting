@@ -98,7 +98,10 @@
         const { data: votes } = await supabaseClient.from('single_votes').select('*');
         const { data: songs } = await supabaseClient.from('songs').select('*');
         const { data: results } = await supabaseClient.from('results').select('*');
-        const { data: config } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+        
+        // Hier holen wir die Zahl aus deiner Config-Tabelle
+        const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+        const eliminationCount = configData ? parseInt(configData.value) : 0;
 
         const songMap = {};
         songs.forEach(s => {
@@ -109,15 +112,11 @@
             };
         });
 
-        // RAUSWURF-LOGIK: 
-        // 1. Wir nehmen alle Einzelstimmen (Pre-Voting)
-        const preVotes = votes.filter(v => v.mode === 'pre');
-        
-        // 2. Wir berechnen für JEDEN Voter ein virtuelles Ranking, das "qualified: yes" überspringt
+        // --- SCHATTEN-LOGIK FÜR RAUSWURF ---
         const virtualPoints = {}; 
         results.forEach(r => virtualPoints[r.id] = 0);
 
-        const voterGroups = preVotes.reduce((acc, v) => {
+        const voterGroups = votes.filter(v => v.mode === 'pre').reduce((acc, v) => {
             if (!acc[v.voter_name]) acc[v.voter_name] = [];
             acc[v.voter_name].push(v);
             return acc;
@@ -126,48 +125,53 @@
         const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
 
         Object.values(voterGroups).forEach(userVotes => {
-            // Sortiere Stimmen des Nutzers nach originalen Punkten (Rang)
+            // Sortiere nach den tatsächlich vergebenen Punkten (Rangfolge des Nutzers)
             userVotes.sort((a, b) => b.points - a.points);
             
             let pointer = 0;
             userVotes.forEach(v => {
-                // Nur wenn Song NICHT vorab qualifiziert ist, bekommt er virtuelle Punkte
-                if (songMap[v.id] && songMap[v.id].qualified === 'no' && pointer < escPoints.length) {
+                // Nur Songs, die NICHT 'yes' bei qualified haben, rücken in der Punkteliste nach oben
+                if (songMap[v.id] && songMap[v.id].qualified !== 'yes' && pointer < escPoints.length) {
                     virtualPoints[v.id] += escPoints[pointer];
                     pointer++;
                 }
             });
         });
 
-        // 3. Wer hat in dieser virtuellen Liste am wenigsten Punkte?
-        const eliminationCount = parseInt(config?.value || 0);
+        // Wer sind die Verlierer der Schatten-Rechnung?
         const losers = Object.keys(virtualPoints)
-            .filter(id => songMap[id] && songMap[id].qualified === 'no')
+            .filter(id => songMap[id] && songMap[id].qualified !== 'yes')
             .map(id => ({ id: parseInt(id), pts: virtualPoints[id] }))
-            .sort((a, b) => a.pts - b.pts); // Kleinste zuerst
+            .sort((a, b) => a.pts - b.pts); // Kleinste Punktzahl zuerst
         
+        // Hier greift dein elimination_count aus der Datenbank
         const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
 
-        // Leaderboards rendern
+        // --- RENDERING ---
         renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
         renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, []);
         renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
 
-        // Vote Cards
+        // Vote Cards wie gehabt
         const grouped = votes.reduce((acc, v) => {
             const key = `${v.voter_name}_${v.mode}`;
             if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
             acc[key].items.push(v);
             return acc;
         }, {});
+        
+        const preCont = document.getElementById('pre-container');
+        const liveCont = document.getElementById('live-container');
+        preCont.innerHTML = ''; liveCont.innerHTML = ''; // Container leeren vor neuem Render
+
         renderVoteCards(Object.values(grouped), songMap);
 
         document.getElementById('loader').classList.add('hidden');
     } catch (err) {
-        console.error("Fehler im Admin-Bereich:", err);
+        console.error("Admin-Fehler:", err);
+        document.getElementById('loader').innerText = "Fehler beim Laden!";
     }
 }
-
 function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
     const table = document.getElementById(tableId);
     table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
