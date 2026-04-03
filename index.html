@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
         /* Overlay für den Schnelldurchgang */
+.hidden { display: none !important; }
+        
 #recap-overlay {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
@@ -158,18 +160,31 @@ async function startVoting() {
 }
 
 function showRecap() {
-    document.getElementById('recap-overlay').classList.remove('hidden');
-    recapTimeLeft = 30; // Dauer des Schnelldurchgangs in Sekunden
+    // Overlay sichtbar machen
+    const overlay = document.getElementById('recap-overlay');
+    overlay.classList.remove('hidden');
     
+    // Timer zurücksetzen
+    recapTimeLeft = 30; 
+    const btn = document.getElementById('close-recap-btn');
+    const timerDisplay = document.getElementById('recap-timer');
+    
+    // Sicherstellen, dass der Button zu Beginn wirklich gesperrt ist
+    btn.disabled = true;
+    btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
+
     recapInterval = setInterval(() => {
         recapTimeLeft--;
-        document.getElementById('recap-timer').innerText = recapTimeLeft;
+        timerDisplay.innerText = recapTimeLeft;
         
         if (recapTimeLeft <= 0) {
             clearInterval(recapInterval);
-            const btn = document.getElementById('close-recap-btn');
-            btn.disabled = false;
+            btn.disabled = false; // Schaltet den Button aktiv
             btn.innerText = "Verstanden! Zum Voting";
+            btn.style.background = "#00ff88"; // Kleiner visueller Hinweis, dass es jetzt geht
+            btn.style.cursor = "pointer";
+        } else {
+            btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
         }
     }, 1000);
 }
