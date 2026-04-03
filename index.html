@@ -168,75 +168,60 @@
         }
 
         async function submitVoting() {
-            if (!confirm("Voting jetzt final absenden?")) return;
+    if (!confirm("Voting jetzt final absenden?")) return;
 
-            const btn = document.getElementById('submit-btn');
-            btn.disabled = true;
-            btn.innerText = "Übermittle...";
-            const items = document.querySelectorAll('.song-item');
-            const voterName = document.getElementById('username').value;
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = "Übermittle...";
+    const items = document.querySelectorAll('.song-item');
+    const voterName = document.getElementById('username').value;
 
-            try {
-                const votesToUpload = [];
-                const escPoints = currentMode === 'pre' ? [12, 10, 8, 7, 6, 5, 4, 3, 2, 1] : [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-                let pointsPointer = 0;
+    try {
+        const votesToUpload = [];
+        const escPoints = currentMode === 'pre' ? [12, 10, 8, 7, 6, 5, 4, 3, 2, 1] : [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
 
-                for (let i = 0; i < items.length; i++) {
-                    const sId = items[i].getAttribute('data-id');
-                    const isQualified = items[i].getAttribute('data-qualified') === 'yes';
-                    
-                    let pointsToGive = 0;
+        for (let i = 0; i < items.length; i++) {
+            const sId = items[i].getAttribute('data-id');
+            const addedPts = escPoints[i] || 0; // Jeder bekommt Punkte nach Rang
 
-                    // Logik: Punkte nur an NICHT-QUALIFIZIERTE geben (Halbfinale)
-                    if (currentMode === 'pre') {
-                        if (!isQualified && pointsPointer < escPoints.length) {
-                            pointsToGive = escPoints[pointsPointer];
-                            pointsPointer++;
-                        }
-                    } else {
-                        // Im Live-Voting (Finale) bekommt jeder oben Punkte
-                        pointsToGive = escPoints[i] || 0;
-                    }
+            votesToUpload.push({
+                id: sId, 
+                voter_name: voterName,
+                points: addedPts,
+                mode: currentMode
+            });
 
-                    votesToUpload.push({
-                        id: sId, 
-                        voter_name: voterName,
-                        points: pointsToGive,
-                        mode: currentMode
-                    });
-
-                    // Result-Tabelle updaten
-                    const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
-                    if (row) {
-                        let updates = {};
-                        if (currentMode === 'pre') {
-                            updates.points_pre = (row.points_pre || 0) + pointsToGive;
-                            updates.points_live = row.points_live || 0; 
-                        } else {
-                            updates.points_live = (row.points_live || 0) + pointsToGive;
-                            updates.points_pre = row.points_pre || 0;
-                        }
-                        updates.points_all = updates.points_pre + updates.points_live;
-                        await supabaseClient.from('results').update(updates).eq('id', sId);
-                    }
+            // Update der results Tabelle
+            const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
+            if (row) {
+                let updates = {};
+                if (currentMode === 'pre') {
+                    updates.points_pre = (row.points_pre || 0) + addedPts;
+                    updates.points_live = row.points_live || 0; 
+                } else {
+                    updates.points_live = (row.points_live || 0) + addedPts;
+                    updates.points_pre = row.points_pre || 0;
                 }
-
-                const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
-                if (voteErr) throw voteErr;
-
-                if (currentMode === 'pre' && loggedInUserId) {
-                    await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-                }
-
-                alert("Erfolgreich gespeichert!");
-                location.reload();
-
-            } catch (err) {
-                console.error(err);
-                alert("Fehler: " + err.message);
-                btn.disabled = false;
+                updates.points_all = (updates.points_pre || 0) + (updates.points_live || 0);
+                await supabaseClient.from('results').update(updates).eq('id', sId);
             }
         }
+
+        const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
+        if (voteErr) throw voteErr;
+
+        if (currentMode === 'pre' && loggedInUserId) {
+            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+        }
+
+        alert("Erfolgreich gespeichert!");
+        location.reload();
+    } catch (err) {
+        console.error(err);
+        alert("Fehler: " + err.message);
+        btn.disabled = false;
+    }
+}
         initApp();
     </script>
 </body>
