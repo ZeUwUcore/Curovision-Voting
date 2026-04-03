@@ -188,7 +188,7 @@
         }
 
         // UNTERSCHIEDLICHE ANZEIGE: Pre-Voting zeigt Rang, Live-Voting zeigt Punkte
-        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        const livePoints = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
         const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
 
         item.innerHTML = `
@@ -233,45 +233,59 @@ async function submitVoting() {
         const votesToUpload = [];
         const voterName = document.getElementById('username').value;
 
-        const livePoints = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
 
+
+        // Wir nutzen eine Schleife für die Updates
         // Wir nutzen eine Schleife für die Updates
         for (let index = 0; index < items.length; index++) {
             const item = items[index];
             const songId = item.getAttribute('data-id');
+            
+            // Punktesystem (Hier angepasst an loadSongs)
+            const livePoints = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+            const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+            const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
             const points = pointsMap[index] || 0;
 
-            // 1. Daten für single_votes sammeln
-            // WICHTIG: Wenn deine Spalte in der DB 'song_id' heißt, ändere 'id:' unten in 'song_id:'
+            // 1. Daten für die Historie (single_votes) sammeln
             votesToUpload.push({
                 voter_name: voterName,
-                id: songId, // <--- PRÜFEN: Heißt die Spalte in single_votes wirklich 'id'?
+                id: songId, 
                 points: points,
                 mode: currentMode
             });
 
-            // 2. Update der 'results' Tabelle
-            // Bestimme die Spalte: In deiner Admin-Datei heißt sie points_pre / points_live
-            const pointColumn = (currentMode === 'live') ? 'points_live' : 'points_pre';
-            
-            // Aktuellen Stand holen
+            // 2. Aktuelle Werte aus 'results' abrufen, um Summen zu bilden
             const { data: currentRes, error: fetchError } = await supabaseClient
                 .from('results')
-                .select(pointColumn)
-                .eq('id', songId) // Hier ist 'id' korrekt, da es die Song-ID ist
+                .select('points_pre, points_live')
+                .eq('id', songId)
                 .single();
 
-            if (fetchError) console.error("Fehler beim Holen der Ergebnisse für ID " + songId, fetchError);
+            if (fetchError) console.error("Fehler beim Abruf für ID " + songId, fetchError);
 
-            const oldPoints = currentRes ? (currentRes[pointColumn] || 0) : 0;
-            const newTotal = oldPoints + points;
+            // Aktuelle Werte sicher auslesen (0 falls leer)
+            let pre = currentRes ? (currentRes.points_pre || 0) : 0;
+            let live = currentRes ? (currentRes.points_live || 0) : 0;
 
-            // Neuen Stand in 'results' schreiben
+            // Neue Punkte zur richtigen Spalte addieren
+            if (currentMode === 'live') {
+                live += points;
+            } else {
+                pre += points;
+            }
+
+            // Gesamtsumme berechnen
+            const total = pre + live;
+
+            // 3. Alle drei Spalten in 'results' gleichzeitig aktualisieren
             const { error: updateError } = await supabaseClient
                 .from('results')
-                .update({ [pointColumn]: newTotal })
+                .update({ 
+                    points_pre: pre, 
+                    points_live: live, 
+                    points_all: total 
+                })
                 .eq('id', songId);
 
             if (updateError) throw updateError;
