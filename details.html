@@ -93,19 +93,29 @@
             }
         }
 
-        async function fetchAllData() {
+       async function fetchAllData() {
             try {
                 const { data: votes } = await supabaseClient.from('single_votes').select('*');
                 const { data: songs } = await supabaseClient.from('songs').select('*');
                 const { data: results } = await supabaseClient.from('results').select('*');
+                const { data: config } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
 
                 const songMap = {};
                 songs.forEach(s => {
                     songMap[s.id] = { 
                         display: `${s.title} (${s.artist})`, 
-                        flag: s.country ? s.country.toLowerCase() : null 
+                        flag: s.country ? s.country.toLowerCase() : null,
+                        qualified: s.qualified // Wichtig für die Rauswurf-Logik
                     };
                 });
+
+                // Berechnung der Rauswürfe (Nur die 'no' qualified Songs betrachten)
+                const eliminationCount = parseInt(config.value || 0);
+                const nonQualifiedResults = results
+                    .filter(r => songMap[r.id] && songMap[r.id].qualified === 'no')
+                    .sort((a, b) => a.points_pre - b.points_pre); // Niedrigste Punkte zuerst
+                
+                const eliminatedIds = nonQualifiedResults.slice(0, eliminationCount).map(r => r.id);
 
                 const grouped = votes.reduce((acc, v) => {
                     const key = `${v.voter_name}_${v.mode}`;
@@ -115,14 +125,41 @@
                 }, {});
 
                 renderVoteCards(Object.values(grouped), songMap);
-                renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap);
-                renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap);
-                renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap);
+                
+                // Leaderboards rendern
+                renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
+                renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, []);
+                renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
 
                 document.getElementById('loader').classList.add('hidden');
             } catch (err) {
                 console.error(err);
             }
+        }
+
+        function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
+            const table = document.getElementById(tableId);
+            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+            sortedData.forEach((res, index) => {
+                const s = songMap[res.id];
+                if(!s) return;
+                
+                const isEliminated = eliminatedIds.includes(res.id);
+                const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+                
+                const row = table.insertRow();
+                if (isEliminated) {
+                    row.style.background = "rgba(255, 0, 0, 0.2)"; // Rot markieren
+                    row.style.textDecoration = "line-through";
+                }
+
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${flagHtml}${s.display}</td>
+                    <td>${res[pointKey]}</td>
+                    <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ GESETZT" : "✅ WEITER")}</td>
+                `;
+            });
         }
 
         function renderVoteCards(groups, songMap) {
