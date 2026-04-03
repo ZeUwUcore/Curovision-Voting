@@ -175,39 +175,7 @@
         document.getElementById('debug-status').innerText = "FEHLER: " + err.message;
     }
 }
-function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
-    const table = document.getElementById(tableId);
-    table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
-    
-    // Zähler für die sichtbare Platzierung (#)
-    let visibleRank = 1;
 
-    sortedData.forEach((res) => {
-        const sId = Number(res.id);
-        const s = songMap[sId];
-        if(!s) return;
-        
-        const isEliminated = eliminatedIds.includes(sId);
-        
-        if (tableId === 'table-live' && isEliminated) return;
-
-        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-        const row = table.insertRow();
-        
-        if (isEliminated) {
-            row.style.color = "#ff4d4d";
-            row.style.opacity = "0.7";
-        }
-
-        row.innerHTML = `
-            <td>${visibleRank}</td>
-            <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
-            <td>${res[pointKey]}</td>
-            <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ FINALIST" : "✅ WEITER")}</td>
-        `;
-        visibleRank++;
-    });
-}
         function renderVoteCards(groups, songMap) {
             const preCont = document.getElementById('pre-container');
             const liveCont = document.getElementById('live-container');
@@ -230,27 +198,34 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
     const table = document.getElementById(tableId);
     table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
     
-    sortedData.forEach((res, index) => {
-        const sId = Number(res.id); // Hier ID erzwingen
+    let visibleRank = 1;
+
+    sortedData.forEach((res) => {
+        const sId = Number(res.id);
         const s = songMap[sId];
         if(!s) return;
         
-        // Prüfung gegen die Liste der Zahlen
-        const isEliminated = eliminatedIds.includes(sId); 
+        const isEliminated = eliminatedIds.includes(sId);
+        
+        // WICHTIG: Im Live-Ranking (table-live) fliegen die 'RAUS'-Songs komplett aus der Liste
+        if (tableId === 'table-live' && isEliminated) return;
+
         const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
         
+        // Optik für Pre-Voting/Gesamt-Ranking
         if (isEliminated) {
-            row.style.color = "#ff4d4d"; // Rot
-            row.style.fontWeight = "bold";
+            row.style.color = "#ff4d4d";
+            row.style.opacity = "0.7";
         }
 
         row.innerHTML = `
-            <td>${index + 1}</td>
+            <td>${visibleRank}</td>
             <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
             <td>${res[pointKey]}</td>
             <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ FINALIST" : "✅ WEITER")}</td>
         `;
+        visibleRank++;
     });
 }
     </script>
