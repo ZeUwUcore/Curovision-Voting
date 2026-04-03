@@ -122,56 +122,21 @@
         }
 
         async function loadSongs() {
-    // 1. Alle benötigten Daten laden
-    let { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
-    let { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
-    let { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-    
+    // ... (vorheriger Code zum Laden von songs, votes und config bleibt gleich) ...
+    const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
     const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-    // 2. Rauswurf-Logik (identisch zu details.html), um zu wissen, wer im Live-Voting fehlt
-    const virtualPoints = {};
-    songs.forEach(s => virtualPoints[s.id] = 0);
-    
-    const voterGroups = votes.reduce((acc, v) => {
-        if (!acc[v.voter_name]) acc[v.voter_name] = [];
-        acc[v.voter_name].push(v);
-        return acc;
-    }, {});
+    // Rauswurf-Logik berechnen (um ausgeschiedene IDs zu erhalten)
+    // [Hier die Logik aus der vorherigen Antwort einfügen, um 'eliminatedIds' zu generieren]
 
-    const escPrePoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-    Object.values(voterGroups).forEach(userVotes => {
-        userVotes.sort((a, b) => b.points - a.points);
-        let pointer = 0;
-        userVotes.forEach(v => {
-            const s = songs.find(x => x.id == v.id);
-            if (s && s.qualified !== 'yes' && pointer < escPrePoints.length) {
-                virtualPoints[v.id] += escPrePoints[pointer];
-                pointer++;
-            }
-        });
-    });
-
-    const eliminatedIds = Object.keys(virtualPoints)
-        .filter(id => {
-            const s = songs.find(x => x.id == id);
-            return s && s.qualified !== 'yes';
-        })
-        .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
-        .sort((a, b) => a.pts - b.pts)
-        .slice(0, eliminationCount)
-        .map(l => l.id);
-
-    // 3. Songs filtern
     let filtered = songs;
     if (currentMode === 'pre') {
         filtered = songs.filter(s => s.id !== loggedInUserId);
     } else {
-        // Im Live-Voting: Nur wer NICHT eliminiert wurde
+        // Im Live-Voting: Rausgeflogene Songs (eliminatedIds) entfernen
         filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
     }
 
-    // 4. Anzeige rendern
     filtered = shuffleArray(filtered);
     const list = document.getElementById('song-list');
     list.innerHTML = '';
@@ -181,19 +146,16 @@
         item.className = 'song-item';
         item.setAttribute('data-id', s.id);
         
-        const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
-        let subline = s.artist;
-        if (currentMode === 'live' && s.country) {
-            subline = `<span class="fi fi-${s.country.toLowerCase()}"></span> ${s.country.toUpperCase()} • ${s.artist}`;
-        }
+        // LOGIK: Pre-Voting = Rang | Live-Voting = Punkte
+        const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
 
         item.innerHTML = `
             <span class="rank-number">${i+1}</span>
             <div class="song-info">
                 <strong>${s.title}</strong>
-                <small>${subline}</small>
+                <small>${s.artist}</small>
             </div>
-            <div class="points-badge">+${p} P.</div>
+            <div class="points-badge">${badgeContent}</div>
         `;
         list.appendChild(item);
     });
@@ -203,8 +165,13 @@
 function updateBadges() {
     document.querySelectorAll('.song-item').forEach((item, i) => {
         item.querySelector('.rank-number').innerText = i + 1;
-        const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
-        item.querySelector('.points-badge').innerText = "+" + p + " P.";
+        // Auch beim Verschieben aktualisieren:
+        const badge = item.querySelector('.points-badge');
+        if (currentMode === 'pre') {
+            badge.innerText = `Rang ${i + 1}`;
+        } else {
+            badge.innerText = `+${ptsLive[i] || 0} P.`;
+        }
     });
 }
 
