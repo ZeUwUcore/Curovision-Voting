@@ -3,44 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Curovision - Voting Results</title>
+    <title>Curovision - Admin Results</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; min-height: 100vh; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .hidden { display: none !important; }
+        
+        /* Passwort Schutz Style */
+        #lock-screen { background: rgba(255, 255, 255, 0.05); padding: 40px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); text-align: center; margin-top: 100px; }
+        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; width: 200px; }
+        button { background: #00d2ff; color: #121212; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        /* Restliche Styles (wie zuvor) */
         .container { width: 100%; max-width: 900px; }
-        h1 { text-align: center; color: #00d2ff; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 40px; }
-        
-        .section-title { border-bottom: 2px solid rgba(0, 210, 255, 0.3); margin-top: 50px; padding-bottom: 10px; color: #00ff88; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Detail Karten */
-        .voter-card { background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .voter-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
-        .voter-name { font-size: 1.4em; font-weight: bold; color: #00d2ff; }
-        .vote-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .points-label { font-weight: bold; color: #00ff88; min-width: 50px; text-align: right; }
-        
-        /* Ranglisten Styles */
-        .leaderboard { background: rgba(255, 255, 255, 0.07); border-radius: 15px; overflow: hidden; margin-bottom: 30px; border: 1px solid rgba(0, 210, 255, 0.2); }
+        h1 { color: #00d2ff; text-align: center; text-transform: uppercase; }
+        .section-title { border-bottom: 2px solid rgba(0, 210, 255, 0.3); margin-top: 50px; color: #00ff88; }
+        .voter-card { background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        .vote-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .leaderboard { background: rgba(255, 255, 255, 0.07); border-radius: 15px; overflow: hidden; margin-bottom: 30px; }
         table { width: 100%; border-collapse: collapse; }
-        th { background: rgba(0, 210, 255, 0.2); padding: 12px; text-align: left; font-size: 0.9em; }
-        td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        tr:nth-child(1) { background: rgba(255, 215, 0, 0.15); color: #ffd700; font-weight: bold; } /* Gold */
-        tr:nth-child(2) { background: rgba(192, 192, 192, 0.1); color: #c0c0c0; } /* Silber */
-        tr:nth-child(3) { background: rgba(205, 127, 50, 0.1); color: #cd7f32; } /* Bronze */
-        
-        .rank { width: 40px; font-weight: bold; text-align: center; }
-        .fi { border-radius: 2px; margin-right: 8px; }
-        .badge { padding: 4px 10px; border-radius: 5px; font-size: 0.8em; font-weight: bold; text-transform: uppercase; }
-        .badge-pre { background: #ff9800; color: #000; }
-        .badge-live { background: #00d2ff; color: #000; }
-        .hidden { display: none; }
+        th, td { padding: 12px; text-align: left; }
+        tr:nth-child(1) { color: #ffd700; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>Curovision Detailed Results</h1>
+    <div id="lock-screen">
+        <h2>🔒 Admin Bereich</h2>
+        <p>Bitte Passwort eingeben, um Ergebnisse zu sehen:</p>
+        <input type="password" id="admin-pass" placeholder="Passwort...">
+        <br>
+        <button onclick="checkPass()">Freischalten</button>
+    </div>
+
+    <div id="main-content" class="container hidden">
+        <h1>Curovision Results</h1>
         <div id="loader" style="text-align: center; padding: 50px;">Lade Daten...</div>
         
         <h2 class="section-title">Pre-Voting Abgaben</h2>
@@ -50,30 +48,39 @@
         <div id="live-container"></div>
 
         <h1 style="margin-top: 80px;">Ranglisten</h1>
-        
-        <h2 class="section-title">1. Rangliste: Pre-Voting</h2>
+        <h2 class="section-title">1. Pre-Voting</h2>
         <div class="leaderboard"><table id="table-pre"></table></div>
-
-        <h2 class="section-title">2. Rangliste: Live-Voting</h2>
+        <h2 class="section-title">2. Live-Voting</h2>
         <div class="leaderboard"><table id="table-live"></table></div>
-
-        <h2 class="section-title">3. Rangliste: Gesamtergebnis</h2>
+        <h2 class="section-title">3. Gesamtergebnis</h2>
         <div class="leaderboard"><table id="table-all"></table></div>
     </div>
 
     <script>
+        // DEIN PASSWORT HIER ÄNDERN:
+        const ADMIN_PASSWORD = "Eurovision2026"; 
+
         const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        function checkPass() {
+            const input = document.getElementById('admin-pass').value;
+            if(input === ADMIN_PASSWORD) {
+                document.getElementById('lock-screen').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                fetchAllData(); // Erst jetzt Daten laden
+            } else {
+                alert("Falsches Passwort!");
+            }
+        }
+
         async function fetchAllData() {
             try {
-                // Daten aus allen 3 Tabellen holen
                 const { data: votes } = await supabaseClient.from('single_votes').select('*');
                 const { data: songs } = await supabaseClient.from('songs').select('*');
                 const { data: results } = await supabaseClient.from('results').select('*');
 
-                // Song-Mapping erstellen (für Name + Flagge)
                 const songMap = {};
                 songs.forEach(s => {
                     songMap[s.id] = { 
@@ -82,16 +89,14 @@
                     };
                 });
 
-                // 1. Detail-Karten rendern
                 const grouped = votes.reduce((acc, v) => {
                     const key = `${v.voter_name}_${v.mode}`;
                     if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
                     acc[key].items.push(v);
                     return acc;
                 }, {});
-                renderVoteCards(Object.values(grouped), songMap);
 
-                // 2. Ranglisten rendern
+                renderVoteCards(Object.values(grouped), songMap);
                 renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap);
                 renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap);
                 renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap);
@@ -99,36 +104,22 @@
                 document.getElementById('loader').classList.add('hidden');
             } catch (err) {
                 console.error(err);
-                document.getElementById('loader').innerText = "Fehler beim Laden!";
             }
         }
 
         function renderVoteCards(groups, songMap) {
             const preCont = document.getElementById('pre-container');
             const liveCont = document.getElementById('live-container');
-            
             groups.forEach(group => {
                 const card = document.createElement('div');
                 card.className = 'voter-card';
                 group.items.sort((a, b) => b.points - a.points);
-
                 const itemsHtml = group.items.map(v => {
                     const s = songMap[v.id];
                     const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-                    return `
-                        <div class="vote-item">
-                            <span>${flagHtml}${s ? s.display : 'Song #' + v.id}</span>
-                            <span class="points-label">${v.points} Pkt.</span>
-                        </div>`;
+                    return `<div class="vote-item"><span>${flagHtml}${s ? s.display : 'Song #' + v.id}</span><b>${v.points} Pkt.</b></div>`;
                 }).join('');
-
-                card.innerHTML = `
-                    <div class="voter-header">
-                        <span class="voter-name">${group.name}</span>
-                        <span class="badge badge-${group.mode}">${group.mode}</span>
-                    </div>
-                    <div class="vote-details">${itemsHtml}</div>`;
-                
+                card.innerHTML = `<h3>${group.name} (${group.mode})</h3>${itemsHtml}`;
                 if (group.mode === 'pre') preCont.appendChild(card);
                 else liveCont.appendChild(card);
             });
@@ -136,21 +127,14 @@
 
         function renderLeaderboard(tableId, sortedData, pointKey, songMap) {
             const table = document.getElementById(tableId);
-            table.innerHTML = `<tr><th class="rank">#</th><th>Land & Song</th><th style="text-align:right">Punkte</th></tr>`;
-            
+            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th></tr>`;
             sortedData.forEach((res, index) => {
                 const s = songMap[res.id];
                 const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
                 const row = table.insertRow();
-                row.innerHTML = `
-                    <td class="rank">${index + 1}</td>
-                    <td>${flagHtml}${s ? s.display : 'Unbekannt'}</td>
-                    <td style="text-align:right; font-weight:bold;">${res[pointKey]}</td>
-                `;
+                row.innerHTML = `<td>${index + 1}</td><td>${flagHtml}${s ? s.display : '...'}</td><td>${res[pointKey]}</td>`;
             });
         }
-
-        fetchAllData();
     </script>
 </body>
 </html>
