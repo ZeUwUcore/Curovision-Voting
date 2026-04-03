@@ -119,76 +119,74 @@
     }
 
     async function loadSongs() {
-        // 1. Daten laden
-        const { data: songs } = await supabaseClient.from('songs').select('*');
-        const { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
-        const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-        const eliminationCount = configData ? parseInt(configData.value) : 0;
+    const { data: songs } = await supabaseClient.from('songs').select('*');
+    const { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
+    const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+    const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-        // 2. Rauswurf-IDs berechnen (identisch zu Admin-Seite)
-        const virtualPoints = {};
-        songs.forEach(s => virtualPoints[Number(s.id)] = 0);
-        const voterGroups = votes.reduce((acc, v) => {
-            if (!acc[v.voter_name]) acc[v.voter_name] = [];
-            acc[v.voter_name].push(v);
-            return acc;
-        }, {});
-        const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        Object.values(voterGroups).forEach(userVotes => {
-            userVotes.sort((a, b) => b.points - a.points);
-            let pointer = 0;
-            userVotes.forEach(v => {
-                const s = songs.find(x => Number(x.id) === Number(v.id));
-                if (s && s.qualified !== 'yes' && pointer < escPoints.length) {
-                    virtualPoints[Number(v.id)] += escPoints[pointer];
-                    pointer++;
-                }
-            });
+    // Rauswurf-IDs berechnen
+    const virtualPoints = {};
+    songs.forEach(s => virtualPoints[Number(s.id)] = 0);
+    const voterGroups = votes.reduce((acc, v) => {
+        if (!acc[v.voter_name]) acc[v.voter_name] = [];
+        acc[v.voter_name].push(v);
+        return acc;
+    }, {});
+    const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+    Object.values(voterGroups).forEach(userVotes => {
+        userVotes.sort((a, b) => b.points - a.points);
+        let pointer = 0;
+        userVotes.forEach(v => {
+            const s = songs.find(x => Number(x.id) === Number(v.id));
+            if (s && s.qualified !== 'yes' && pointer < escPoints.length) {
+                virtualPoints[Number(v.id)] += escPoints[pointer];
+                pointer++;
+            }
         });
-        const eliminatedIds = Object.keys(virtualPoints)
-            .filter(id => {
-                const s = songs.find(x => Number(x.id) === Number(id));
-                return s && s.qualified !== 'yes';
-            })
-            .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
-            .sort((a, b) => a.pts - b.pts)
-            .slice(0, eliminationCount)
-            .map(l => l.id);
+    });
+    const eliminatedIds = Object.keys(virtualPoints)
+        .filter(id => {
+            const s = songs.find(x => Number(x.id) === Number(id));
+            return s && s.qualified !== 'yes';
+        })
+        .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+        .sort((a, b) => a.pts - b.pts)
+        .slice(0, eliminationCount)
+        .map(l => l.id);
 
-        // 3. Filtern & Mischen
-        let filtered = [];
-        if (currentMode === 'pre') {
-            filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
-        } else {
-            filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
-        }
-        filtered = shuffleArray(filtered);
-
-        // 4. Anzeigen
-        const list = document.getElementById('song-list');
-        list.innerHTML = '';
-        filtered.forEach((s, i) => {
-            const item = document.createElement('div');
-            item.className = 'song-item';
-            item.setAttribute('data-id', s.id);
-            const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
-            item.innerHTML = `
-                <span class="rank-number">${i+1}</span>
-                <div class="song-info"><strong>${s.title}</strong><small>${s.artist}</small></div>
-                <div class="points-badge">${badgeContent}</div>
-            `;
-            list.appendChild(item);
-        });
-        new Sortable(list, { animation: 150, onEnd: updateBadges });
+    let filtered = [];
+    if (currentMode === 'pre') {
+        filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+    } else {
+        filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
     }
+    
+    filtered = shuffleArray(filtered);
+    const list = document.getElementById('song-list');
+    list.innerHTML = '';
+    
+    filtered.forEach((s, i) => {
+        const item = document.createElement('div');
+        item.className = 'song-item';
+        item.setAttribute('data-id', s.id);
+        const badgeContent = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
+        
+        // Flaggen-Logik repariert:
+        const flagHtml = s.country ? `<span class="fi fi-${s.country.toLowerCase()}"></span> ` : '';
+        const subtext = currentMode === 'live' ? `${flagHtml}${s.artist}` : s.artist;
 
-    function updateBadges() {
-        document.querySelectorAll('.song-item').forEach((item, i) => {
-            item.querySelector('.rank-number').innerText = i + 1;
-            const badge = item.querySelector('.points-badge');
-            badge.innerText = currentMode === 'pre' ? `Rang ${i + 1}` : `+${ptsLive[i] || 0} P.`;
-        });
-    }
+        item.innerHTML = `
+            <span class="rank-number">${i+1}</span>
+            <div class="song-info">
+                <strong>${s.title}</strong>
+                <small>${subtext}</small>
+            </div>
+            <div class="points-badge">${badgeContent}</div>
+        `;
+        list.appendChild(item);
+    });
+    new Sortable(list, { animation: 150, onEnd: updateBadges });
+}
 
     async function submitVoting() {
         if (!confirm("Voting jetzt final absenden?")) return;
