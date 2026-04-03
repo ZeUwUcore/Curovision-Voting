@@ -11,8 +11,9 @@
         .hidden { display: none !important; }
         
         #lock-screen { background: rgba(255, 255, 255, 0.05); padding: 40px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); text-align: center; margin-top: 100px; }
-        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; width: 200px; }
-        button { background: #00d2ff; color: #121212; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; width: 200px; background: white; color: black; }
+        button { background: #00d2ff; color: #121212; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #00ff88; }
         
         .container { width: 100%; max-width: 900px; }
         h1 { color: #00d2ff; text-align: center; text-transform: uppercase; }
@@ -32,7 +33,7 @@
         <p>Bitte Passwort eingeben, um Ergebnisse zu sehen:</p>
         <input type="password" id="admin-pass" placeholder="Passwort...">
         <br>
-        <button onclick="checkPass()">Freischalten</button>
+        <button id="unlock-btn" onclick="checkPass()">Freischalten</button>
     </div>
 
     <div id="main-content" class="container hidden">
@@ -55,21 +56,40 @@
     </div>
 
     <script>
-        // PASSWORT HIER ÄNDERN:
-        const ADMIN_PASSWORD = "KlonoaMüffelt"; 
-
         const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        function checkPass() {
-            const input = document.getElementById('admin-pass').value;
-            if(input === ADMIN_PASSWORD) {
-                document.getElementById('lock-screen').classList.add('hidden');
-                document.getElementById('main-content').classList.remove('hidden');
-                fetchAllData();
-            } else {
-                alert("Falsches Passwort!");
+        async function checkPass() {
+            const userInput = document.getElementById('admin-pass').value;
+            const btn = document.getElementById('unlock-btn');
+            
+            btn.innerText = "Prüfe...";
+            btn.disabled = true;
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('config')
+                    .select('value')
+                    .eq('key', 'admin_password')
+                    .single();
+
+                if (error) throw error;
+
+                if (btoa(userInput) === data.value) {
+                    document.getElementById('lock-screen').classList.add('hidden');
+                    document.getElementById('main-content').classList.remove('hidden');
+                    fetchAllData();
+                } else {
+                    alert("Falsches Passwort!");
+                    btn.innerText = "Freischalten";
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Fehler beim Abrufen des Passworts. Stelle sicher, dass 'admin_password' in der Tabelle 'config' existiert.");
+                btn.innerText = "Freischalten";
+                btn.disabled = false;
             }
         }
 
