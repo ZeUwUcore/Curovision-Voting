@@ -10,12 +10,10 @@
         body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .hidden { display: none !important; }
         
-        /* Passwort Schutz Style */
         #lock-screen { background: rgba(255, 255, 255, 0.05); padding: 40px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); text-align: center; margin-top: 100px; }
         input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; width: 200px; }
         button { background: #00d2ff; color: #121212; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         
-        /* Restliche Styles (wie zuvor) */
         .container { width: 100%; max-width: 900px; }
         h1 { color: #00d2ff; text-align: center; text-transform: uppercase; }
         .section-title { border-bottom: 2px solid rgba(0, 210, 255, 0.3); margin-top: 50px; color: #00ff88; }
@@ -57,7 +55,7 @@
     </div>
 
     <script>
-        // DEIN PASSWORT HIER ÄNDERN:
+        // PASSWORT HIER ÄNDERN:
         const ADMIN_PASSWORD = "Eurovision2026"; 
 
         const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
@@ -69,7 +67,7 @@
             if(input === ADMIN_PASSWORD) {
                 document.getElementById('lock-screen').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
-                fetchAllData(); // Erst jetzt Daten laden
+                fetchAllData();
             } else {
                 alert("Falsches Passwort!");
             }
