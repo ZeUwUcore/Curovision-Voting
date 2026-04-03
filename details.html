@@ -190,7 +190,6 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
         const isEliminated = eliminatedIds.includes(sId);
         
         if (tableId === 'table-live' && isEliminated) return;
-        if (tableId === 'table-all' && isEliminated) return;
 
         const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
