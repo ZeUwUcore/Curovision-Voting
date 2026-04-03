@@ -129,15 +129,18 @@
             const list = document.getElementById('song-list');
             list.innerHTML = '';
             
-            const filtered = songs.filter(s => currentMode !== 'pre' || s.id !== loggedInUserId);
+            // Filter: Im Pre-Voting den eigenen Song verstecken, im Live-Voting ausgeschiedene Songs verstecken
+            const filtered = songs.filter(s => {
+                if (currentMode === 'pre') return s.id !== loggedInUserId;
+                return true; // Hier könnte später ein Filter für s.eliminated kommen
+            });
             
             filtered.forEach((s, i) => {
                 const item = document.createElement('div');
                 item.className = 'song-item';
                 item.setAttribute('data-id', s.id);
-                const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+                item.setAttribute('data-qualified', s.qualified || 'no'); // Status merken
                 
-                // Anzeige-Logik für Artist und Land/Flagge
                 let subline = s.artist;
                 if (currentMode === 'live' && s.country) {
                     subline = `<span class="fi fi-${s.country.toLowerCase()}"></span> ${s.country.toUpperCase()} • ${s.artist}`;
@@ -149,7 +152,7 @@
                         <strong>${s.title}</strong>
                         <small>${subline}</small>
                     </div>
-                    <div class="points-badge">+${p} P.</div>
+                    <div class="points-badge">${i+1}. Platz</div>
                 `;
                 list.appendChild(item);
             });
@@ -159,70 +162,81 @@
         function updateBadges() {
             document.querySelectorAll('.song-item').forEach((item, i) => {
                 item.querySelector('.rank-number').innerText = i + 1;
-                const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
-                item.querySelector('.points-badge').innerText = "+" + p + " P.";
+                // Zeigt für den User nur den Platz an
+                item.querySelector('.points-badge').innerText = (i + 1) + ". Platz";
             });
         }
 
         async function submitVoting() {
-    if (!confirm("Voting jetzt final absenden?")) return;
+            if (!confirm("Voting jetzt final absenden?")) return;
 
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-    btn.innerText = "Übermittle...";
-    const items = document.querySelectorAll('.song-item');
-    const voterName = document.getElementById('username').value;
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.innerText = "Übermittle...";
+            const items = document.querySelectorAll('.song-item');
+            const voterName = document.getElementById('username').value;
 
-    try {
-        const votesToUpload = [];
+            try {
+                const votesToUpload = [];
+                const escPoints = currentMode === 'pre' ? [12, 10, 8, 7, 6, 5, 4, 3, 2, 1] : [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                let pointsPointer = 0;
 
-        for (let i = 0; i < items.length; i++) {
-            const sId = items[i].getAttribute('data-id');
-            const addedPts = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+                for (let i = 0; i < items.length; i++) {
+                    const sId = items[i].getAttribute('data-id');
+                    const isQualified = items[i].getAttribute('data-qualified') === 'yes';
+                    
+                    let pointsToGive = 0;
 
-            votesToUpload.push({
-                id: sId, 
-                voter_name: voterName,
-                points: addedPts,
-                mode: currentMode
-            });
+                    // Logik: Punkte nur an NICHT-QUALIFIZIERTE geben (Halbfinale)
+                    if (currentMode === 'pre') {
+                        if (!isQualified && pointsPointer < escPoints.length) {
+                            pointsToGive = escPoints[pointsPointer];
+                            pointsPointer++;
+                        }
+                    } else {
+                        // Im Live-Voting (Finale) bekommt jeder oben Punkte
+                        pointsToGive = escPoints[i] || 0;
+                    }
 
-            const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
-            
-            if (row) {
-                let updates = {};
-                if (currentMode === 'pre') {
-                    // NUR Pre ändern, Live-Wert aus der DB beibehalten
-                    updates.points_pre = (row.points_pre || 0) + addedPts;
-                    updates.points_live = row.points_live || 0; 
-                } else {
-                    // NUR Live ändern, Pre-Wert aus der DB beibehalten
-                    updates.points_live = (row.points_live || 0) + addedPts;
-                    updates.points_pre = row.points_pre || 0;
+                    votesToUpload.push({
+                        id: sId, 
+                        voter_name: voterName,
+                        points: pointsToGive,
+                        mode: currentMode
+                    });
+
+                    // Result-Tabelle updaten
+                    const { data: row } = await supabaseClient.from('results').select('*').eq('id', sId).single();
+                    if (row) {
+                        let updates = {};
+                        if (currentMode === 'pre') {
+                            updates.points_pre = (row.points_pre || 0) + pointsToGive;
+                            updates.points_live = row.points_live || 0; 
+                        } else {
+                            updates.points_live = (row.points_live || 0) + pointsToGive;
+                            updates.points_pre = row.points_pre || 0;
+                        }
+                        updates.points_all = updates.points_pre + updates.points_live;
+                        await supabaseClient.from('results').update(updates).eq('id', sId);
+                    }
                 }
-                // Gesamtsumme neu berechnen
-                updates.points_all = updates.points_pre + updates.points_live;
 
-                await supabaseClient.from('results').update(updates).eq('id', sId);
+                const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
+                if (voteErr) throw voteErr;
+
+                if (currentMode === 'pre' && loggedInUserId) {
+                    await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+                }
+
+                alert("Erfolgreich gespeichert!");
+                location.reload();
+
+            } catch (err) {
+                console.error(err);
+                alert("Fehler: " + err.message);
+                btn.disabled = false;
             }
         }
-
-        const { error: voteErr } = await supabaseClient.from('single_votes').insert(votesToUpload);
-        if (voteErr) throw voteErr;
-
-        if (currentMode === 'pre' && loggedInUserId) {
-            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-        }
-
-        alert("Erfolgreich gespeichert!");
-        location.reload();
-
-    } catch (err) {
-        console.error(err);
-        alert("Fehler: " + err.message);
-        btn.disabled = false;
-    }
-}
         initApp();
     </script>
 </body>
