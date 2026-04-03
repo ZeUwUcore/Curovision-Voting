@@ -207,24 +207,30 @@ function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds
         const s = songMap[sId];
         if(!s) return;
         
+        // Wir prüfen IMMER gegen eliminatedIds, egal welche Tabelle
         const isEliminated = eliminatedIds.includes(sId);
         
-        // NEU: Im Live-Ranking (table-live) die Rausgefallenen komplett ignorieren
+        // Wenn wir in der Live-Tabelle sind, blenden wir die Rausgeflogenen komplett aus
         if (tableId === 'table-live' && isEliminated) return;
 
         const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
         
+        // Status-Text Logik korrigiert
+        let statusText = "✅ WEITER";
         if (isEliminated) {
+            statusText = "❌ RAUS";
             row.style.color = "#ff4d4d";
             row.style.opacity = "0.7";
+        } else if (s.qualified === 'yes') {
+            statusText = "⭐ FINALIST";
         }
 
         row.innerHTML = `
             <td>${visibleRank}</td>
             <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
             <td>${res[pointKey]}</td>
-            <td>${isEliminated ? "❌ RAUS" : (s.qualified === 'yes' ? "⭐ FINALIST" : "✅ WEITER")}</td>
+            <td>${statusText}</td>
         `;
         visibleRank++;
     });
