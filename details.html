@@ -194,7 +194,9 @@
             });
         }
 
-        function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
+        // ... (Oben bleibt alles gleich bis zur Funktion renderLeaderboard) ...
+
+function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
     const table = document.getElementById(tableId);
     table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
     
@@ -207,13 +209,12 @@
         
         const isEliminated = eliminatedIds.includes(sId);
         
-        // WICHTIG: Im Live-Ranking (table-live) fliegen die 'RAUS'-Songs komplett aus der Liste
+        // NEU: Im Live-Ranking (table-live) die Rausgefallenen komplett ignorieren
         if (tableId === 'table-live' && isEliminated) return;
 
         const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
         const row = table.insertRow();
         
-        // Optik für Pre-Voting/Gesamt-Ranking
         if (isEliminated) {
             row.style.color = "#ff4d4d";
             row.style.opacity = "0.7";
