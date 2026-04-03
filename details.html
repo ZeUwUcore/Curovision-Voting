@@ -197,43 +197,51 @@
         }
 
         function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
-            const table = document.getElementById(tableId);
-            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
-            
-            let visibleRank = 1;
-            const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
+    const table = document.getElementById(tableId);
+    table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+    
+    let visibleRank = 1;
+    const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
 
-            sortedData.forEach((res) => {
-                const sId = Number(res.id);
-                const s = songMap[sId];
-                if(!s) return;
-                
-                const isEliminated = cleanEliminatedIds.includes(sId);
-                
-                // Live-Tabelle filtert Rausgeflogene komplett aus
-                if (tableId === 'table-live' && isEliminated) return;
+    sortedData.forEach((res) => {
+        const sId = Number(res.id);
+        const s = songMap[sId];
+        if(!s) return;
+        
+        const isEliminated = cleanEliminatedIds.includes(sId);
+        
+        // Live-Tabelle filtert Rausgeflogene komplett aus
+        if (tableId === 'table-live' && isEliminated) return;
 
-                const row = table.insertRow();
-                const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-                
-                let statusText = "✅ WEITER";
-                if (isEliminated) {
-                    statusText = "❌ RAUS";
-                    row.style.color = "#ff4d4d";
-                    row.style.opacity = "0.7";
-                } else if (s.qualified === 'yes') {
-                    statusText = "⭐ FINALIST";
-                }
-
-                row.innerHTML = `
-                    <td>${visibleRank}</td>
-                    <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
-                    <td>${res[pointKey]}</td>
-                    <td>${statusText}</td>
-                `;
-                visibleRank++;
-            });
+        const row = table.insertRow();
+        const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+        
+        let statusText = "✅ WEITER";
+        if (isEliminated) {
+            statusText = "❌ RAUS";
+            row.style.color = "#ff4d4d";
+            row.style.opacity = "0.7";
+        } else if (s.qualified === 'yes') {
+            statusText = "⭐ FINALIST";
         }
+
+        // --- NEUE LOGIK FÜR NEGATIVE PUNKTE ---
+        let pointsDisplay = res[pointKey]; // Standardwert
+        
+        // Nur in der Gesamt-Rangliste (table-all) negative Punkte abfangen
+        if (tableId === 'table-all' && res[pointKey] < 0) {
+            pointsDisplay = `0 (${res[pointKey]})`;
+        }
+
+        row.innerHTML = `
+            <td>${visibleRank}</td>
+            <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
+            <td style="font-weight: bold;">${pointsDisplay}</td>
+            <td>${statusText}</td>
+        `;
+        visibleRank++;
+    });
+}
     </script>
 </body>
 </html>
