@@ -134,7 +134,7 @@
         if(currentMode === 'pre') document.getElementById('userpassword').classList.remove('hidden');
     }
 
-    let recapTimeLeft = 30; // Sekunden, die man schauen MUSS (hier anpassen)
+    let recapTimeLeft = 30; 
 let recapInterval;
 
 async function startVoting() {
@@ -148,47 +148,43 @@ async function startVoting() {
         if (data.vote_status === 'yes') return alert("Du hast bereits abgestimmt!");
         loggedInUserId = data.id;
         
-        // ZEIGE RECAP NUR IM PRE-VOTING
-        showRecap();
+        showRecap(); // Ruft die unten stehende Funktion auf
     } else {
-        // Im Live-Voting direkt zum Voting (oder auch Recap, falls gewünscht)
         proceedToVoting(name);
     }
 }
 
 function showRecap() {
-    // Overlay sichtbar machen
-    function showRecap() {
-    // Overlay sichtbar machen
-    const overlay = document.getElementById('recap-overlay'); // Jetzt korrekt geschrieben
+    const overlay = document.getElementById('recap-overlay');
     const iframe = document.getElementById('recap-video');
-    
-    // Setzt die URL neu, damit das Video bei jedem Login von vorne startet
-    iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1&mute=1";
-    
-    overlay.classList.remove('hidden');
-    
-    // Timer zurücksetzen
-    recapTimeLeft = 30; 
     const btn = document.getElementById('close-recap-btn');
     const timerDisplay = document.getElementById('recap-timer');
-    
-    // ... restlicher Code ...
-}
-    
-    // Sicherstellen, dass der Button zu Beginn wirklich gesperrt ist
+
+    // Video-URL setzen (Autoplay & Mute)
+    if (iframe) {
+        iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1&mute=1";
+    }
+
+    // Overlay anzeigen
+    overlay.classList.remove('hidden');
+
+    // Timer initialisieren
+    recapTimeLeft = 30;
     btn.disabled = true;
+    btn.style.background = "#555";
     btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
 
+    // Intervall starten
+    clearInterval(recapInterval); // Sicherheitshalber alte Intervalle löschen
     recapInterval = setInterval(() => {
         recapTimeLeft--;
         timerDisplay.innerText = recapTimeLeft;
-        
+
         if (recapTimeLeft <= 0) {
             clearInterval(recapInterval);
-            btn.disabled = false; // Schaltet den Button aktiv
+            btn.disabled = false;
             btn.innerText = "Verstanden! Zum Voting";
-            btn.style.background = "#00ff88"; // Kleiner visueller Hinweis, dass es jetzt geht
+            btn.style.background = "#00ff88";
             btn.style.cursor = "pointer";
         } else {
             btn.innerText = `Bitte warten... (${recapTimeLeft}s)`;
