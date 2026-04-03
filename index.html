@@ -122,50 +122,91 @@
         }
 
         async function loadSongs() {
-            let { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
-            if (songs) {
-                songs = shuffleArray(songs);
-            }    
-            const list = document.getElementById('song-list');
-            list.innerHTML = '';
-            
-            // Filter: Im Pre-Voting den eigenen Song verstecken, im Live-Voting ausgeschiedene Songs verstecken
-            const filtered = songs.filter(s => {
-                if (currentMode === 'pre') return s.id !== loggedInUserId;
-                return true; // Hier könnte später ein Filter für s.eliminated kommen
-            });
-            
-            filtered.forEach((s, i) => {
-                const item = document.createElement('div');
-                item.className = 'song-item';
-                item.setAttribute('data-id', s.id);
-                item.setAttribute('data-qualified', s.qualified || 'no'); // Status merken
-                
-                let subline = s.artist;
-                if (currentMode === 'live' && s.country) {
-                    subline = `<span class="fi fi-${s.country.toLowerCase()}"></span> ${s.country.toUpperCase()} • ${s.artist}`;
-                }
+    // 1. Alle benötigten Daten laden
+    let { data: songs } = await supabaseClient.from('songs').select('*').order('id', { ascending: true });
+    let { data: votes } = await supabaseClient.from('single_votes').select('*').eq('mode', 'pre');
+    let { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
+    
+    const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-                item.innerHTML = `
-                    <span class="rank-number">${i+1}</span>
-                    <div class="song-info">
-                        <strong>${s.title}</strong>
-                        <small>${subline}</small>
-                    </div>
-                    <div class="points-badge">${i+1}. Platz</div>
-                `;
-                list.appendChild(item);
-            });
-            new Sortable(list, { animation: 150, onEnd: updateBadges });
+    // 2. Rauswurf-Logik (identisch zu details.html), um zu wissen, wer im Live-Voting fehlt
+    const virtualPoints = {};
+    songs.forEach(s => virtualPoints[s.id] = 0);
+    
+    const voterGroups = votes.reduce((acc, v) => {
+        if (!acc[v.voter_name]) acc[v.voter_name] = [];
+        acc[v.voter_name].push(v);
+        return acc;
+    }, {});
+
+    const escPrePoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+    Object.values(voterGroups).forEach(userVotes => {
+        userVotes.sort((a, b) => b.points - a.points);
+        let pointer = 0;
+        userVotes.forEach(v => {
+            const s = songs.find(x => x.id == v.id);
+            if (s && s.qualified !== 'yes' && pointer < escPrePoints.length) {
+                virtualPoints[v.id] += escPrePoints[pointer];
+                pointer++;
+            }
+        });
+    });
+
+    const eliminatedIds = Object.keys(virtualPoints)
+        .filter(id => {
+            const s = songs.find(x => x.id == id);
+            return s && s.qualified !== 'yes';
+        })
+        .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+        .sort((a, b) => a.pts - b.pts)
+        .slice(0, eliminationCount)
+        .map(l => l.id);
+
+    // 3. Songs filtern
+    let filtered = songs;
+    if (currentMode === 'pre') {
+        filtered = songs.filter(s => s.id !== loggedInUserId);
+    } else {
+        // Im Live-Voting: Nur wer NICHT eliminiert wurde
+        filtered = songs.filter(s => !eliminatedIds.includes(Number(s.id)));
+    }
+
+    // 4. Anzeige rendern
+    filtered = shuffleArray(filtered);
+    const list = document.getElementById('song-list');
+    list.innerHTML = '';
+    
+    filtered.forEach((s, i) => {
+        const item = document.createElement('div');
+        item.className = 'song-item';
+        item.setAttribute('data-id', s.id);
+        
+        const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+        let subline = s.artist;
+        if (currentMode === 'live' && s.country) {
+            subline = `<span class="fi fi-${s.country.toLowerCase()}"></span> ${s.country.toUpperCase()} • ${s.artist}`;
         }
 
-        function updateBadges() {
-            document.querySelectorAll('.song-item').forEach((item, i) => {
-                item.querySelector('.rank-number').innerText = i + 1;
-                // Zeigt für den User nur den Platz an
-                item.querySelector('.points-badge').innerText = (i + 1) + ". Platz";
-            });
-        }
+        item.innerHTML = `
+            <span class="rank-number">${i+1}</span>
+            <div class="song-info">
+                <strong>${s.title}</strong>
+                <small>${subline}</small>
+            </div>
+            <div class="points-badge">+${p} P.</div>
+        `;
+        list.appendChild(item);
+    });
+    new Sortable(list, { animation: 150, onEnd: updateBadges });
+}
+
+function updateBadges() {
+    document.querySelectorAll('.song-item').forEach((item, i) => {
+        item.querySelector('.rank-number').innerText = i + 1;
+        const p = (currentMode === 'pre' ? ptsPre[i] : ptsLive[i]) || 0;
+        item.querySelector('.points-badge').innerText = "+" + p + " P.";
+    });
+}
 
         async function submitVoting() {
     if (!confirm("Voting jetzt final absenden?")) return;
