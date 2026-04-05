@@ -18,6 +18,8 @@
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             z-index: 10000;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         #recap-video {
@@ -28,6 +30,7 @@
             border-radius: 12px;
             box-shadow: 0 0 30px rgba(0, 210, 255, 0.3);
             margin: 20px 0;
+            background: black;
         }
 
         .drag-handle {
@@ -49,7 +52,7 @@
         
         input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; color: black; }
         button { background: #00d2ff; color: #121212; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:disabled { background: #555; color: #aaa; }
+        button:disabled { background: #555; color: #aaa; cursor: not-allowed; }
 
         #song-list { margin-top: 20px; text-align: left; touch-action: pan-y; }
         .song-item { 
@@ -63,7 +66,7 @@
         .rank-number { margin-right: 15px; font-weight: bold; color: #00d2ff; width: 20px; }
         .song-info { flex-grow: 1; overflow: hidden; }
         .song-info strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .points-badge { margin-left: 10px; color: #121212; font-weight: bold; padding: 5px 10px; border-radius: 5px; background: #00ff88; min-width: 60px; text-align: center; }
+        .points-badge { margin-left: 10px; color: #121212; font-weight: bold; padding: 5px 10px; border-radius: 5px; background: #00ff88; min-width: 80px; text-align: center; font-size: 0.9em; }
         .sortable-ghost { opacity: 0.3; background: #00d2ff; }
     </style>
 </head>
@@ -98,10 +101,20 @@
     </div>
 
     <div id="recap-overlay" class="hidden">
-        <h1 style="color: #00d2ff;">🎬 SCHNELLDURCHGANG</h1>
-        <p>Gleich geht's los! Schau dir kurz die Zusammenfassung an.</p>
-        <iframe id="recap-video" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-        <button id="close-recap-btn" onclick="closeRecap()" disabled>Bitte warten... (<span id="recap-timer">30</span>s)</button>
+        <h1 style="color: #00d2ff; margin-top: 0;">🎬 SCHNELLDURCHGANG</h1>
+        <p id="recap-instruction">Schau dir kurz die Zusammenfassung an (Play drücken).</p>
+        
+        <video id="recap-video" 
+               controlsList="nodownload noplaybackrate" 
+               disablePictureInPicture 
+               oncontextmenu="return false;">
+            <source src="recap.mp4" type="video/mp4">
+            Dein Browser unterstützt keine Videos.
+        </video>
+
+        <button id="close-recap-btn" onclick="closeRecap()" disabled>
+            Bitte Video ansehen... (<span id="recap-timer">30</span>s)
+        </button>
     </div>
 
     <script>
@@ -140,25 +153,52 @@
 
     function showRecap() {
         const overlay = document.getElementById('recap-overlay');
-        const iframe = document.getElementById('recap-video');
+        const video = document.getElementById('recap-video');
         const btn = document.getElementById('close-recap-btn');
-        iframe.src = "https://www.youtube.com/embed/5eZonu8XsEs?autoplay=1";
+        
         overlay.classList.remove('hidden');
-        recapInterval = setInterval(() => {
-            recapTimeLeft--;
-            document.getElementById('recap-timer').innerText = recapTimeLeft;
-            if (recapTimeLeft <= 0) {
-                clearInterval(recapInterval);
-                btn.disabled = false;
-                btn.innerText = "Verstanden! Zum Voting";
-                btn.style.background = "#00ff88";
+        
+        // Timer Logik: Läuft nur wenn Video spielt
+        video.onplay = () => {
+            if (!recapInterval && recapTimeLeft > 0) {
+                recapInterval = setInterval(() => {
+                    recapTimeLeft--;
+                    document.getElementById('recap-timer').innerText = Math.max(0, recapTimeLeft);
+                    if (recapTimeLeft <= 0) {
+                        clearInterval(recapInterval);
+                        recapInterval = null;
+                        btn.disabled = false;
+                        btn.innerText = "Verstanden! Zum Voting";
+                        btn.style.background = "#00ff88";
+                    }
+                }, 1000);
             }
-        }, 1000);
+        };
+
+        // Stoppt Timer wenn Video pausiert
+        video.onpause = () => {
+            clearInterval(recapInterval);
+            recapInterval = null;
+        };
+
+        // Verhindert Spulen (Seek)
+        let lastTime = 0;
+        video.ontimeupdate = () => {
+            if (!video.seeking) {
+                lastTime = video.currentTime;
+            }
+        };
+        video.onseeking = () => {
+            if (video.currentTime > lastTime) {
+                video.currentTime = lastTime;
+            }
+        };
     }
 
     function closeRecap() {
+        const video = document.getElementById('recap-video');
+        video.pause();
         document.getElementById('recap-overlay').classList.add('hidden');
-        document.getElementById('recap-video').src = "";
         proceedToVoting(document.getElementById('username').value);
     }
 
@@ -170,147 +210,129 @@
     }
 
     async function loadSongs() {
-    const { data: songs } = await supabaseClient.from('songs').select('*');
-    const list = document.getElementById('song-list');
-    list.innerHTML = '';
-    
-    let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
-    filtered.sort(() => Math.random() - 0.5);
+        const { data: songs } = await supabaseClient.from('songs').select('*');
+        const list = document.getElementById('song-list');
+        list.innerHTML = '';
+        
+        let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+        filtered.sort(() => Math.random() - 0.5);
 
-    filtered.forEach((s, i) => {
-        const item = document.createElement('div');
-        item.className = 'song-item';
-        item.setAttribute('data-id', s.id);
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
 
-        let flagHtml = '';
-        if (currentMode !== 'pre' && s.country) {
-            flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
-        }
+        filtered.forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
 
-        // UNTERSCHIEDLICHE ANZEIGE: Pre-Voting zeigt Rang, Live-Voting zeigt Punkte
-        const livePoints = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-        const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
-
-        item.innerHTML = `
-            <div class="drag-handle">☰</div>
-            <span class="rank-number">${i+1}</span>
-            <div class="song-info">
-                <strong>${s.title}</strong>
-                <small>${flagHtml}${s.artist}</small>
-            </div>
-            <div class="points-badge">${displayLabel}</div>
-        `;
-        list.appendChild(item);
-    });
-
-    new Sortable(list, { 
-        animation: 150, 
-        handle: '.drag-handle',
-        ghostClass: 'sortable-ghost',
-        onEnd: updateBadges 
-    });
-}
-
-function updateBadges() {
-    const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
-    document.querySelectorAll('.song-item').forEach((item, i) => {
-        item.querySelector('.rank-number').innerText = i + 1;
-        // Auch hier beim Verschieben die Anzeige aktualisieren
-        const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
-        item.querySelector('.points-badge').innerText = displayLabel;
-    });
-}
-
-async function submitVoting() {
-    if(!confirm("Voting jetzt final absenden?")) return;
-    
-    const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
-    btn.innerText = "Speichere...";
-
-    try {
-        const items = document.querySelectorAll('.song-item');
-        const votesToUpload = [];
-        const voterName = document.getElementById('username').value;
-
-
-
-        // Wir nutzen eine Schleife für die Updates
-        // Wir nutzen eine Schleife für die Updates
-        for (let index = 0; index < items.length; index++) {
-            const item = items[index];
-            const songId = item.getAttribute('data-id');
-            
-            // Punktesystem (Hier angepasst an loadSongs)
-            const livePoints = [15, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-            const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-            const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
-            const points = pointsMap[index] || 0;
-
-            // 1. Daten für die Historie (single_votes) sammeln
-            votesToUpload.push({
-                voter_name: voterName,
-                id: songId, 
-                points: points,
-                mode: currentMode
-            });
-
-            // 2. Aktuelle Werte aus 'results' abrufen, um Summen zu bilden
-            const { data: currentRes, error: fetchError } = await supabaseClient
-                .from('results')
-                .select('points_pre, points_live')
-                .eq('id', songId)
-                .single();
-
-            if (fetchError) console.error("Fehler beim Abruf für ID " + songId, fetchError);
-
-            // Aktuelle Werte sicher auslesen (0 falls leer)
-            let pre = currentRes ? (currentRes.points_pre || 0) : 0;
-            let live = currentRes ? (currentRes.points_live || 0) : 0;
-
-            // Neue Punkte zur richtigen Spalte addieren
-            if (currentMode === 'live') {
-                live += points;
-            } else {
-                pre += points;
+            let flagHtml = '';
+            if (currentMode !== 'pre' && s.country) {
+                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
             }
 
-            // Gesamtsumme berechnen
-            const total = pre + live;
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
 
-            // 3. Alle drei Spalten in 'results' gleichzeitig aktualisieren
-            const { error: updateError } = await supabaseClient
-                .from('results')
-                .update({ 
-                    points_pre: pre, 
-                    points_live: live, 
-                    points_all: total 
-                })
-                .eq('id', songId);
+            item.innerHTML = `
+                <div class="drag-handle">☰</div>
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info">
+                    <strong>${s.title}</strong>
+                    <small>${flagHtml}${s.artist}</small>
+                </div>
+                <div class="points-badge">${displayLabel}</div>
+            `;
+            list.appendChild(item);
+        });
 
-            if (updateError) throw updateError;
-        }
-
-        // 3. Alle Einzelstimmen in 'single_votes' eintragen
-        const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
-        if(voteError) throw voteError;
-
-        // 4. Teilnehmer sperren
-        if(currentMode === 'pre' && loggedInUserId) {
-            await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-        }
-
-        alert("Erfolgreich abgesendet!");
-        location.reload();
-
-    } catch (err) {
-        console.error("Vollständiger Fehler-Stack:", err);
-        alert("Fehler beim Speichern: " + (err.message || "Unbekannter Datenbankfehler"));
-        btn.disabled = false;
-        btn.innerText = "Voting final absenden";
+        new Sortable(list, { 
+            animation: 150, 
+            handle: '.drag-handle',
+            ghostClass: 'sortable-ghost',
+            onEnd: updateBadges 
+        });
     }
-}
+
+    function updateBadges() {
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        document.querySelectorAll('.song-item').forEach((item, i) => {
+            item.querySelector('.rank-number').innerText = i + 1;
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+            item.querySelector('.points-badge').innerText = displayLabel;
+        });
+    }
+
+    async function submitVoting() {
+        if(!confirm("Voting jetzt final absenden?")) return;
+        
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerText = "Speichere...";
+
+        try {
+            const items = document.querySelectorAll('.song-item');
+            const votesToUpload = [];
+            const voterName = document.getElementById('username').value;
+
+            for (let index = 0; index < items.length; index++) {
+                const item = items[index];
+                const songId = item.getAttribute('data-id');
+                
+                const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+                const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
+                const points = pointsMap[index] || 0;
+
+                votesToUpload.push({
+                    voter_name: voterName,
+                    id: songId, 
+                    points: points,
+                    mode: currentMode
+                });
+
+                const { data: currentRes, error: fetchError } = await supabaseClient
+                    .from('results')
+                    .select('points_pre, points_live')
+                    .eq('id', songId)
+                    .single();
+
+                if (fetchError) console.error("Fehler beim Abruf für ID " + songId, fetchError);
+
+                let pre = currentRes ? (currentRes.points_pre || 0) : 0;
+                let live = currentRes ? (currentRes.points_live || 0) : 0;
+
+                if (currentMode === 'live') { live += points; } else { pre += points; }
+
+                const total = pre + live;
+
+                const { error: updateError } = await supabaseClient
+                    .from('results')
+                    .update({ 
+                        points_pre: pre, 
+                        points_live: live, 
+                        points_all: total 
+                    })
+                    .eq('id', songId);
+
+                if (updateError) throw updateError;
+            }
+
+            const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
+            if(voteError) throw voteError;
+
+            if(currentMode === 'pre' && loggedInUserId) {
+                await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+            }
+
+            alert("Erfolgreich abgesendet!");
+            location.reload();
+
+        } catch (err) {
+            console.error("Vollständiger Fehler-Stack:", err);
+            alert("Fehler beim Speichern: " + (err.message || "Unbekannter Datenbankfehler"));
+            btn.disabled = false;
+            btn.innerText = "Voting final absenden";
+        }
+    }
     initApp();
-</script>
+    </script>
 </body>
 </html>
