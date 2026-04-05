@@ -160,7 +160,7 @@
         overlay.classList.remove('hidden');
 
         // Autoplay-Strategie: Stumm starten, um Browser-Blockade zu umgehen
-        video.muted = true; 
+        video.muted = false; 
         video.play().catch(err => console.log("Autoplay blockiert, User muss klicken"));
 
         // Timer Logik
