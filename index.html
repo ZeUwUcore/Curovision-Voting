@@ -159,9 +159,9 @@
         
         overlay.classList.remove('hidden');
 
-        // Autoplay-Strategie: Stumm starten, um Browser-Blockade zu umgehen
-        video.muted = false; 
-        video.play().catch(err => console.log("Autoplay blockiert, User muss klicken"));
+        // Autoplay-Strategie
+        video.muted = false; // Empfohlen für maximale Kompatibilität
+        video.play().catch(err => console.log("Autoplay blockiert"));
 
         // Timer Logik
         video.onplay = () => {
@@ -180,6 +180,34 @@
             }
         };
 
+        video.onpause = () => {
+            clearInterval(recapInterval);
+            recapInterval = null;
+        };
+
+        // STRIKTE ANTI-SPUL-LOGIK (Vor und Zurück)
+        let lastTime = 0;
+
+        video.ontimeupdate = () => {
+            // Wir merken uns die Zeit nur, wenn nicht gerade gespult wird
+            if (!video.seeking) {
+                lastTime = video.currentTime;
+            }
+        };
+
+        video.onseeking = () => {
+            // Differenz zwischen gewünschter Zeit und letzter bekannter Zeit
+            const delta = video.currentTime - lastTime;
+            
+            // Wenn der Nutzer versucht zu springen (egal in welche Richtung),
+            // setzen wir ihn gnadenlos auf die letzte Position zurück.
+            // Wir erlauben nur minimale Abweichungen (kleiner als 1 Sekunde), 
+            // die durch normales Abspielen entstehen können.
+            if (Math.abs(delta) > 1) {
+                video.currentTime = lastTime;
+            }
+        };
+    }
         video.onpause = () => {
             clearInterval(recapInterval);
             recapInterval = null;
