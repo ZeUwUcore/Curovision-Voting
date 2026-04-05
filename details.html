@@ -59,175 +59,188 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_URL = 'https://gvrzwwobfgrrsdzqwcdy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cnp3d29iZmdycnNkenF3Y2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTc3NDksImV4cCI6MjA5MDc5Mzc0OX0.GJHIJD5IEaFD5Q1zPhTRSLr7-EoJhj5ZIqyi4vJJfSY';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        async function checkPass() {
-            const userInput = document.getElementById('admin-pass').value;
-            const btn = document.getElementById('unlock-btn');
-            
-            btn.innerText = "Prüfe...";
-            btn.disabled = true;
+    async function checkPass() {
+        const userInput = document.getElementById('admin-pass').value;
+        const btn = document.getElementById('unlock-btn');
+        
+        btn.innerText = "Prüfe...";
+        btn.disabled = true;
 
-            try {
-                const { data, error } = await supabaseClient
-                    .from('config')
-                    .select('value')
-                    .eq('key', 'admin_password')
-                    .single();
+        try {
+            const { data, error } = await supabaseClient
+                .from('config')
+                .select('value')
+                .eq('key', 'admin_password')
+                .single();
 
-                if (error) throw error;
+            if (error) throw error;
 
-                if (btoa(userInput) === data.value) {
-                    document.getElementById('lock-screen').classList.add('hidden');
-                    document.getElementById('main-content').classList.remove('hidden');
-                    fetchAllData();
-                } else {
-                    alert("Falsches Passwort!");
-                    btn.innerText = "Freischalten";
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                console.error(err);
-                alert("Fehler beim Login.");
+            if (btoa(userInput) === data.value) {
+                document.getElementById('lock-screen').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                fetchAllData();
+            } else {
+                alert("Falsches Passwort!");
                 btn.innerText = "Freischalten";
                 btn.disabled = false;
             }
+        } catch (err) {
+            console.error(err);
+            alert("Fehler beim Login.");
+            btn.innerText = "Freischalten";
+            btn.disabled = false;
         }
+    }
 
-        async function fetchAllData() {
-            try {
-                const { data: votes } = await supabaseClient.from('single_votes').select('*');
-                const { data: songs } = await supabaseClient.from('songs').select('*');
-                const { data: results } = await supabaseClient.from('results').select('*');
-                const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
-                
-                const eliminationCount = configData ? parseInt(configData.value) : 0;
-
-                const songMap = {};
-                songs.forEach(s => {
-                    songMap[Number(s.id)] = { 
-                        display: `${s.title} (${s.artist})`, 
-                        flag: s.country ? s.country.toLowerCase() : null,
-                        qualified: String(s.qualified).toLowerCase().trim()
-                    };
-                });
-
-                // --- ELIMINATION LOGIK ---
-                const virtualPoints = {}; 
-                results.forEach(r => virtualPoints[Number(r.id)] = 0);
-
-                const preVotes = (votes || []).filter(v => v.mode === 'pre');
-                const voterGroups = preVotes.reduce((acc, v) => {
-                    if (!acc[v.voter_name]) acc[v.voter_name] = [];
-                    acc[v.voter_name].push(v);
-                    return acc;
-                }, {});
-
-                const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-
-                Object.values(voterGroups).forEach(userVotes => {
-                    userVotes.sort((a, b) => b.points - a.points);
-                    let pointer = 0;
-                    userVotes.forEach(v => {
-                        const sId = Number(v.id);
-                        if (songMap[sId] && songMap[sId].qualified !== 'yes' && pointer < escPoints.length) {
-                            virtualPoints[sId] += escPoints[pointer];
-                            pointer++;
-                        }
-                    });
-                });
-
-                const losers = Object.keys(virtualPoints)
-                    .filter(id => songMap[Number(id)] && songMap[Number(id)].qualified !== 'yes')
-                    .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
-                    .sort((a, b) => a.pts - b.pts);
-                
-                const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
-
-                // --- RENDERING ---
-                renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
-                renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, eliminatedIds);
-                renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
-
-                // Vote Cards
-                const grouped = (votes || []).reduce((acc, v) => {
-                    const key = `${v.voter_name}_${v.mode}`;
-                    if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
-                    acc[key].items.push(v);
-                    return acc;
-                }, {});
-                
-                document.getElementById('pre-container').innerHTML = '';
-                document.getElementById('live-container').innerHTML = '';
-                renderVoteCards(Object.values(grouped), songMap);
-
-                document.getElementById('loader').classList.add('hidden');
-            } catch (err) {
-                console.error("Admin-Fehler:", err);
-            }
-        }
-
-        function renderVoteCards(groups, songMap) {
-            const preCont = document.getElementById('pre-container');
-            const liveCont = document.getElementById('live-container');
-            groups.forEach(group => {
-                const card = document.createElement('div');
-                card.className = 'voter-card';
-                group.items.sort((a, b) => b.points - a.points);
-                const itemsHtml = group.items.map(v => {
-                    const s = songMap[v.id];
-                    const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-                    return `<div class="vote-item"><span>${flagHtml}${s ? s.display : 'Song #' + v.id}</span><b>${v.points} Pkt.</b></div>`;
-                }).join('');
-                card.innerHTML = `<h3>${group.name} (${group.mode.toUpperCase()})</h3>${itemsHtml}`;
-                if (group.mode === 'pre') preCont.appendChild(card);
-                else liveCont.appendChild(card);
-            });
-        }
-
-        function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
-            const table = document.getElementById(tableId);
-            table.innerHTML = `<tr><th>#</th><th>Song</th><th>Punkte</th><th>Status</th></tr>`;
+    async function fetchAllData() {
+        try {
+            const { data: votes } = await supabaseClient.from('single_votes').select('*');
+            const { data: songs } = await supabaseClient.from('songs').select('*');
+            const { data: results } = await supabaseClient.from('results').select('*');
+            const { data: participants } = await supabaseClient.from('participants').select('id, name'); // Neu: Namen holen
+            const { data: configData } = await supabaseClient.from('config').select('value').eq('key', 'elimination_count').single();
             
-            let visibleRank = 1;
-            const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
+            const eliminationCount = configData ? parseInt(configData.value) : 0;
 
-            sortedData.forEach((res) => {
-                const sId = Number(res.id);
-                const s = songMap[sId];
-                if(!s) return;
-                
-                const isEliminated = cleanEliminatedIds.includes(sId);
-                if (tableId === 'table-live' && isEliminated) return;
-
-                const row = table.insertRow();
-                const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
-                
-                let statusText = "✅ WEITER";
-                if (isEliminated) {
-                    statusText = "❌ RAUS";
-                    row.style.color = "#ff4d4d";
-                    row.style.opacity = "0.7";
-                } else if (s.qualified === 'yes') {
-                    statusText = "⭐ FINALIST";
-                }
-
-                let pointsDisplay = res[pointKey]; 
-                if (tableId === 'table-all' && res[pointKey] < 0) {
-                    pointsDisplay = `0 (${res[pointKey]})`;
-                }
-
-                row.innerHTML = `
-                    <td>${visibleRank}</td>
-                    <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">${flagHtml}${s.display}</td>
-                    <td style="font-weight: bold;">${pointsDisplay}</td>
-                    <td>${statusText}</td>
-                `;
-                visibleRank++;
+            // Teilnehmer-Mapping erstellen (ID -> Name)
+            const participantMap = {};
+            participants.forEach(p => {
+                participantMap[Number(p.id)] = p.name;
             });
+
+            const songMap = {};
+            songs.forEach(s => {
+                const sId = Number(s.id);
+                songMap[sId] = { 
+                    display: `${s.title} (${s.artist})`, 
+                    voterName: participantMap[sId] || "Unbekannt", // Name aus Mapping ziehen
+                    flag: s.country ? s.country.toLowerCase() : null,
+                    qualified: String(s.qualified).toLowerCase().trim()
+                };
+            });
+
+            // --- ELIMINATION LOGIK ---
+            const virtualPoints = {}; 
+            results.forEach(r => virtualPoints[Number(r.id)] = 0);
+
+            const preVotes = (votes || []).filter(v => v.mode === 'pre');
+            const voterGroups = preVotes.reduce((acc, v) => {
+                if (!acc[v.voter_name]) acc[v.voter_name] = [];
+                acc[v.voter_name].push(v);
+                return acc;
+            }, {});
+
+            const escPoints = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+
+            Object.values(voterGroups).forEach(userVotes => {
+                userVotes.sort((a, b) => b.points - a.points);
+                let pointer = 0;
+                userVotes.forEach(v => {
+                    const sId = Number(v.id);
+                    if (songMap[sId] && songMap[sId].qualified !== 'yes' && pointer < escPoints.length) {
+                        virtualPoints[sId] += escPoints[pointer];
+                        pointer++;
+                    }
+                });
+            });
+
+            const losers = Object.keys(virtualPoints)
+                .filter(id => songMap[Number(id)] && songMap[Number(id)].qualified !== 'yes')
+                .map(id => ({ id: Number(id), pts: virtualPoints[id] }))
+                .sort((a, b) => a.pts - b.pts);
+            
+            const eliminatedIds = losers.slice(0, eliminationCount).map(l => l.id);
+
+            // --- RENDERING ---
+            renderLeaderboard('table-pre', [...results].sort((a,b) => b.points_pre - a.points_pre), 'points_pre', songMap, eliminatedIds);
+            renderLeaderboard('table-live', [...results].sort((a,b) => b.points_live - a.points_live), 'points_live', songMap, eliminatedIds);
+            renderLeaderboard('table-all', [...results].sort((a,b) => b.points_all - a.points_all), 'points_all', songMap, eliminatedIds);
+
+            // Vote Cards
+            const grouped = (votes || []).reduce((acc, v) => {
+                const key = `${v.voter_name}_${v.mode}`;
+                if (!acc[key]) acc[key] = { name: v.voter_name, mode: v.mode, items: [] };
+                acc[key].items.push(v);
+                return acc;
+            }, {});
+            
+            document.getElementById('pre-container').innerHTML = '';
+            document.getElementById('live-container').innerHTML = '';
+            renderVoteCards(Object.values(grouped), songMap);
+
+            document.getElementById('loader').classList.add('hidden');
+        } catch (err) {
+            console.error("Admin-Fehler:", err);
         }
-    </script>
+    }
+
+    function renderVoteCards(groups, songMap) {
+        const preCont = document.getElementById('pre-container');
+        const liveCont = document.getElementById('live-container');
+        groups.forEach(group => {
+            const card = document.createElement('div');
+            card.className = 'voter-card';
+            group.items.sort((a, b) => b.points - a.points);
+            const itemsHtml = group.items.map(v => {
+                const s = songMap[v.id];
+                const flagHtml = s && s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+                // Hier auch das Format angepasst: Flagge [Name] Lied (Interpret)
+                const displayText = s ? `${flagHtml}[${s.voterName}] ${s.display}` : `Song #${v.id}`;
+                return `<div class="vote-item"><span>${displayText}</span><b>${v.points} Pkt.</b></div>`;
+            }).join('');
+            card.innerHTML = `<h3>${group.name} (${group.mode.toUpperCase()})</h3>${itemsHtml}`;
+            if (group.mode === 'pre') preCont.appendChild(card);
+            else liveCont.appendChild(card);
+        });
+    }
+
+    function renderLeaderboard(tableId, sortedData, pointKey, songMap, eliminatedIds) {
+        const table = document.getElementById(tableId);
+        table.innerHTML = `<tr><th>#</th><th>Teilnehmer & Song</th><th>Punkte</th><th>Status</th></tr>`;
+        
+        let visibleRank = 1;
+        const cleanEliminatedIds = eliminatedIds.map(id => Number(id));
+
+        sortedData.forEach((res) => {
+            const sId = Number(res.id);
+            const s = songMap[sId];
+            if(!s) return;
+            
+            const isEliminated = cleanEliminatedIds.includes(sId);
+            if (tableId === 'table-live' && isEliminated) return;
+
+            const row = table.insertRow();
+            const flagHtml = s.flag ? `<span class="fi fi-${s.flag}"></span> ` : '';
+            
+            let statusText = "✅ WEITER";
+            if (isEliminated) {
+                statusText = "❌ RAUS";
+                row.style.color = "#ff4d4d";
+                row.style.opacity = "0.7";
+            } else if (s.qualified === 'yes') {
+                statusText = "⭐ FINALIST";
+            }
+
+            let pointsDisplay = res[pointKey]; 
+            if (tableId === 'table-all' && res[pointKey] < 0) {
+                pointsDisplay = `0 (${res[pointKey]})`;
+            }
+
+            row.innerHTML = `
+                <td>${visibleRank}</td>
+                <td style="${isEliminated ? 'text-decoration: line-through;' : ''}">
+                    ${flagHtml}<strong>[${s.voterName}]</strong> ${s.display}
+                </td>
+                <td style="font-weight: bold;">${pointsDisplay}</td>
+                <td>${statusText}</td>
+            `;
+            visibleRank++;
+        });
+    }
+</script>
 </body>
 </html>
