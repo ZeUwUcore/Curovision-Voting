@@ -158,9 +158,6 @@
         const btn = document.getElementById('close-recap-btn');
         
         overlay.classList.remove('hidden');
-
-        // Autoplay-Strategie
-        video.muted = false; // Empfohlen für maximale Kompatibilität
         video.play().catch(err => console.log("Autoplay blockiert"));
 
         // Timer Logik
@@ -185,43 +182,17 @@
             recapInterval = null;
         };
 
-        // STRIKTE ANTI-SPUL-LOGIK (Vor und Zurück)
+        // STRIKTE ANTI-SPUL-LOGIK (Vor und Zurück blockieren)
         let lastTime = 0;
-
         video.ontimeupdate = () => {
-            // Wir merken uns die Zeit nur, wenn nicht gerade gespult wird
             if (!video.seeking) {
                 lastTime = video.currentTime;
             }
         };
 
         video.onseeking = () => {
-            // Differenz zwischen gewünschter Zeit und letzter bekannter Zeit
             const delta = video.currentTime - lastTime;
-            
-            // Wenn der Nutzer versucht zu springen (egal in welche Richtung),
-            // setzen wir ihn gnadenlos auf die letzte Position zurück.
-            // Wir erlauben nur minimale Abweichungen (kleiner als 1 Sekunde), 
-            // die durch normales Abspielen entstehen können.
-            if (Math.abs(delta) > 1) {
-                video.currentTime = lastTime;
-            }
-        };
-    }
-        video.onpause = () => {
-            clearInterval(recapInterval);
-            recapInterval = null;
-        };
-
-        // Anti-Spul-Logik
-        let lastTime = 0;
-        video.ontimeupdate = () => {
-            if (!video.seeking) {
-                lastTime = video.currentTime;
-            }
-        };
-        video.onseeking = () => {
-            if (video.currentTime > lastTime) {
+            if (Math.abs(delta) > 1) { // Mehr als 1 Sekunde Sprung = Reset
                 video.currentTime = lastTime;
             }
         };
@@ -320,35 +291,25 @@
                     mode: currentMode
                 });
 
-                const { data: currentRes, error: fetchError } = await supabaseClient
+                const { data: currentRes } = await supabaseClient
                     .from('results')
                     .select('points_pre, points_live')
                     .eq('id', songId)
                     .single();
 
-                if (fetchError) console.error("Fehler beim Abruf für ID " + songId, fetchError);
-
                 let pre = currentRes ? (currentRes.points_pre || 0) : 0;
                 let live = currentRes ? (currentRes.points_live || 0) : 0;
 
                 if (currentMode === 'live') { live += points; } else { pre += points; }
-
                 const total = pre + live;
 
-                const { error: updateError } = await supabaseClient
+                await supabaseClient
                     .from('results')
-                    .update({ 
-                        points_pre: pre, 
-                        points_live: live, 
-                        points_all: total 
-                    })
+                    .update({ points_pre: pre, points_live: live, points_all: total })
                     .eq('id', songId);
-
-                if (updateError) throw updateError;
             }
 
-            const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
-            if(voteError) throw voteError;
+            await supabaseClient.from('single_votes').insert(votesToUpload);
 
             if(currentMode === 'pre' && loggedInUserId) {
                 await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
@@ -358,8 +319,8 @@
             location.reload();
 
         } catch (err) {
-            console.error("Vollständiger Fehler-Stack:", err);
-            alert("Fehler beim Speichern: " + (err.message || "Unbekannter Datenbankfehler"));
+            console.error(err);
+            alert("Fehler beim Speichern!");
             btn.disabled = false;
             btn.innerText = "Voting final absenden";
         }
