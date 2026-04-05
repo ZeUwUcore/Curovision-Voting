@@ -29,7 +29,7 @@
             border: 2px solid #00d2ff;
             border-radius: 12px;
             box-shadow: 0 0 30px rgba(0, 210, 255, 0.3);
-            margin: 15px 0;
+            margin: 20px 0;
             background: black;
         }
 
@@ -101,16 +101,16 @@
     </div>
 
     <div id="recap-overlay" class="hidden">
-        <h1 style="color: #00d2ff; margin-bottom: 5px;">🎬 SCHNELLDURCHGANG</h1>
-        <p id="recap-instruction" style="color: #00ff88; font-weight: bold; margin: 5px 0;">🔊 Tippe auf das Video für Ton!</p>
+        <h1 style="color: #00d2ff; margin-top: 0;">🎬 SCHNELLDURCHGANG</h1>
+        <p id="recap-instruction">Das Video startet automatisch (ggf. Ton aktivieren).</p>
         
         <video id="recap-video" 
-               playsinline 
-               muted 
+               controls 
                controlsList="nodownload noplaybackrate" 
                disablePictureInPicture 
                oncontextmenu="return false;">
             <source src="recap.mp4" type="video/mp4">
+            Dein Browser unterstützt keine Videos.
         </video>
 
         <button id="close-recap-btn" onclick="closeRecap()" disabled>
@@ -158,9 +158,10 @@
         const btn = document.getElementById('close-recap-btn');
         
         overlay.classList.remove('hidden');
-        
-        // Autoplay Start (Muted)
-        video.play().catch(e => console.log("Autoplay von Browser blockiert, warte auf Interaktion"));
+
+        // Autoplay-Strategie: Stumm starten, um Browser-Blockade zu umgehen
+        video.muted = true; 
+        video.play().catch(err => console.log("Autoplay blockiert, User muss klicken"));
 
         // Timer Logik
         video.onplay = () => {
@@ -174,7 +175,6 @@
                         btn.disabled = false;
                         btn.innerText = "Verstanden! Zum Voting";
                         btn.style.background = "#00ff88";
-                        btn.style.color = "black";
                     }
                 }, 1000);
             }
@@ -185,16 +185,18 @@
             recapInterval = null;
         };
 
-        // Klick auf Video schaltet Ton ein & blendet Hinweis aus
-        video.onclick = () => {
-            video.muted = false;
-            document.getElementById('recap-instruction').style.visibility = 'hidden';
-        };
-
-        // Anti-Spul-Schutz
+        // Anti-Spul-Logik
         let lastTime = 0;
-        video.ontimeupdate = () => { if (!video.seeking) lastTime = video.currentTime; };
-        video.onseeking = () => { if (video.currentTime > lastTime) video.currentTime = lastTime; };
+        video.ontimeupdate = () => {
+            if (!video.seeking) {
+                lastTime = video.currentTime;
+            }
+        };
+        video.onseeking = () => {
+            if (video.currentTime > lastTime) {
+                video.currentTime = lastTime;
+            }
+        };
     }
 
     function closeRecap() {
@@ -223,4 +225,118 @@
 
         filtered.forEach((s, i) => {
             const item = document.createElement('div');
-            item.className = 'song-
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
+
+            let flagHtml = '';
+            if (currentMode !== 'pre' && s.country) {
+                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
+            }
+
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+
+            item.innerHTML = `
+                <div class="drag-handle">☰</div>
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info">
+                    <strong>${s.title}</strong>
+                    <small>${flagHtml}${s.artist}</small>
+                </div>
+                <div class="points-badge">${displayLabel}</div>
+            `;
+            list.appendChild(item);
+        });
+
+        new Sortable(list, { 
+            animation: 150, 
+            handle: '.drag-handle',
+            ghostClass: 'sortable-ghost',
+            onEnd: updateBadges 
+        });
+    }
+
+    function updateBadges() {
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        document.querySelectorAll('.song-item').forEach((item, i) => {
+            item.querySelector('.rank-number').innerText = i + 1;
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+            item.querySelector('.points-badge').innerText = displayLabel;
+        });
+    }
+
+    async function submitVoting() {
+        if(!confirm("Voting jetzt final absenden?")) return;
+        
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerText = "Speichere...";
+
+        try {
+            const items = document.querySelectorAll('.song-item');
+            const votesToUpload = [];
+            const voterName = document.getElementById('username').value;
+
+            for (let index = 0; index < items.length; index++) {
+                const item = items[index];
+                const songId = item.getAttribute('data-id');
+                
+                const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+                const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
+                const points = pointsMap[index] || 0;
+
+                votesToUpload.push({
+                    voter_name: voterName,
+                    id: songId, 
+                    points: points,
+                    mode: currentMode
+                });
+
+                const { data: currentRes, error: fetchError } = await supabaseClient
+                    .from('results')
+                    .select('points_pre, points_live')
+                    .eq('id', songId)
+                    .single();
+
+                if (fetchError) console.error("Fehler beim Abruf für ID " + songId, fetchError);
+
+                let pre = currentRes ? (currentRes.points_pre || 0) : 0;
+                let live = currentRes ? (currentRes.points_live || 0) : 0;
+
+                if (currentMode === 'live') { live += points; } else { pre += points; }
+
+                const total = pre + live;
+
+                const { error: updateError } = await supabaseClient
+                    .from('results')
+                    .update({ 
+                        points_pre: pre, 
+                        points_live: live, 
+                        points_all: total 
+                    })
+                    .eq('id', songId);
+
+                if (updateError) throw updateError;
+            }
+
+            const { error: voteError } = await supabaseClient.from('single_votes').insert(votesToUpload);
+            if(voteError) throw voteError;
+
+            if(currentMode === 'pre' && loggedInUserId) {
+                await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+            }
+
+            alert("Erfolgreich abgesendet!");
+            location.reload();
+
+        } catch (err) {
+            console.error("Vollständiger Fehler-Stack:", err);
+            alert("Fehler beim Speichern: " + (err.message || "Unbekannter Datenbankfehler"));
+            btn.disabled = false;
+            btn.innerText = "Voting final absenden";
+        }
+    }
+    initApp();
+    </script>
+</body>
+</html>
