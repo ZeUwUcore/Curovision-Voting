@@ -109,7 +109,7 @@
                controlsList="nodownload noplaybackrate" 
                disablePictureInPicture 
                oncontextmenu="return false;">
-            <source src="recap.mp4" type="video/mp4">
+            <source src="DEINE_SUPABASE_PUBLIC_URL_HIER_EINFÜGEN" type="video/mp4">
             Dein Browser unterstützt keine Videos.
         </video>
 
@@ -158,9 +158,11 @@
         const btn = document.getElementById('close-recap-btn');
         
         overlay.classList.remove('hidden');
-        video.play().catch(err => console.log("Autoplay blockiert"));
+        
+        // Video neu laden, falls die URL geändert wurde
+        video.load();
+        video.play().catch(err => console.log("Autoplay blockiert oder Video-URL fehlerhaft"));
 
-        // Timer Logik
         video.onplay = () => {
             if (!recapInterval && recapTimeLeft > 0) {
                 recapInterval = setInterval(() => {
@@ -182,7 +184,6 @@
             recapInterval = null;
         };
 
-        // STRIKTE ANTI-SPUL-LOGIK (Vor und Zurück blockieren)
         let lastTime = 0;
         video.ontimeupdate = () => {
             if (!video.seeking) {
@@ -192,7 +193,7 @@
 
         video.onseeking = () => {
             const delta = video.currentTime - lastTime;
-            if (Math.abs(delta) > 1) { // Mehr als 1 Sekunde Sprung = Reset
+            if (Math.abs(delta) > 1) { 
                 video.currentTime = lastTime;
             }
         };
