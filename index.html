@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css"/>
     <style>
         .hidden { display: none !important; }
-        
         #recap-overlay {
             position: fixed;
             top: 0; left: 0;
@@ -21,7 +20,6 @@
             padding: 20px;
             box-sizing: border-box;
         }
-
         #recap-video {
             width: 90vw;
             max-width: 800px;
@@ -32,7 +30,6 @@
             margin: 20px 0;
             background: black;
         }
-
         .drag-handle {
             cursor: grab;
             margin-right: 15px;
@@ -44,16 +41,13 @@
             padding: 0 5px;
         }
         .drag-handle:active { cursor: grabbing; }
-
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom, #1a1a2e, #16213e); color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
         .container { background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 600px; text-align: center; }
         .header-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .title-logo { height: 60px; width: auto; }
-        
         input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; color: black; }
         button { background: #00d2ff; color: #121212; border: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:disabled { background: #555; color: #aaa; cursor: not-allowed; }
-
         #song-list { margin-top: 20px; text-align: left; touch-action: pan-y; }
         .song-item { 
             background: rgba(255, 255, 255, 0.1); 
@@ -102,7 +96,7 @@
 
     <div id="recap-overlay" class="hidden">
         <h1 style="color: #00d2ff; margin-top: 0;">🎬 SCHNELLDURCHGANG</h1>
-        <p id="recap-instruction">Das Video startet automatisch (ggf. Ton aktivieren) / Nach dem Video kannst du abstimmen!</p>
+        <p id="recap-instruction">Das Video startet automatisch / Nach dem Video kannst du abstimmen!</p>
         
         <video id="recap-video" 
                controls 
@@ -126,7 +120,7 @@
     let currentMode = '';
     let loggedInUserId = null;
     let recapInterval;
-    let recapTimeLeft = 468; // <--- HIER DEN WERT AUF 468 GEÄNDERT
+    let recapTimeLeft = 468; 
 
     async function initApp() {
         const { data } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
@@ -142,180 +136,3 @@
     async function startVoting() {
         const name = document.getElementById('username').value;
         if(!name) return alert("Bitte Namen eingeben!");
-        if(currentMode === 'pre') {
-            const pass = document.getElementById('userpassword').value;
-            const { data } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
-            if (!data) return alert("Login falsch!");
-            if (data.vote_status === 'yes') return alert("Bereits abgestimmt!");
-            loggedInUserId = data.id;
-            showRecap();
-        } else { proceedToVoting(name); }
-    }
-
-    function showRecap() {
-        const overlay = document.getElementById('recap-overlay');
-        const video = document.getElementById('recap-video');
-        const btn = document.getElementById('close-recap-btn');
-        
-        overlay.classList.remove('hidden');
-        video.load();
-
-        // Optional: Setzt den Timer automatisch auf die Videolänge, sobald diese bekannt ist
-        video.onloadedmetadata = () => {
-            recapTimeLeft = Math.floor(video.duration);
-            document.getElementById('recap-timer').innerText = recapTimeLeft;
-        };
-
-        video.play().catch(err => console.log("Autoplay blockiert"));
-
-        video.onplay = () => {
-            if (!recapInterval && recapTimeLeft > 0) {
-                recapInterval = setInterval(() => {
-                    recapTimeLeft--;
-                    document.getElementById('recap-timer').innerText = Math.max(0, recapTimeLeft);
-                    if (recapTimeLeft <= 0) {
-                        clearInterval(recapInterval);
-                        recapInterval = null;
-                        btn.disabled = false;
-                        btn.innerText = "Verstanden! Zum Voting";
-                        btn.style.background = "#00ff88";
-                    }
-                }, 1000);
-            }
-        };
-
-        video.onpause = () => {
-            clearInterval(recapInterval);
-            recapInterval = null;
-        };
-    function closeRecap() {
-        const video = document.getElementById('recap-video');
-        video.pause();
-        document.getElementById('recap-overlay').classList.add('hidden');
-        proceedToVoting(document.getElementById('username').value);
-    }
-
-    function proceedToVoting(name) {
-        document.getElementById('login-area').classList.add('hidden');
-        document.getElementById('voting-area').classList.remove('hidden');
-        document.getElementById('display-name').innerText = name;
-        loadSongs();
-    }
-
-    async function loadSongs() {
-        const { data: songs } = await supabaseClient.from('songs').select('*');
-        const list = document.getElementById('song-list');
-        list.innerHTML = '';
-        
-        let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
-        filtered.sort(() => Math.random() - 0.5);
-
-        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
-
-        filtered.forEach((s, i) => {
-            const item = document.createElement('div');
-            item.className = 'song-item';
-            item.setAttribute('data-id', s.id);
-
-            let flagHtml = '';
-            if (currentMode !== 'pre' && s.country) {
-                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
-            }
-
-            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
-
-            item.innerHTML = `
-                <div class="drag-handle">☰</div>
-                <span class="rank-number">${i+1}</span>
-                <div class="song-info">
-                    <strong>${s.title}</strong>
-                    <small>${flagHtml}${s.artist}</small>
-                </div>
-                <div class="points-badge">${displayLabel}</div>
-            `;
-            list.appendChild(item);
-        });
-
-        new Sortable(list, { 
-            animation: 150, 
-            handle: '.drag-handle',
-            ghostClass: 'sortable-ghost',
-            onEnd: updateBadges 
-        });
-    }
-
-    function updateBadges() {
-        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
-        document.querySelectorAll('.song-item').forEach((item, i) => {
-            item.querySelector('.rank-number').innerText = i + 1;
-            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
-            item.querySelector('.points-badge').innerText = displayLabel;
-        });
-    }
-
-    async function submitVoting() {
-        if(!confirm("Voting jetzt final absenden?")) return;
-        
-        const btn = document.getElementById('submit-btn');
-        btn.disabled = true;
-        btn.innerText = "Speichere...";
-
-        try {
-            const items = document.querySelectorAll('.song-item');
-            const votesToUpload = [];
-            const voterName = document.getElementById('username').value;
-
-            for (let index = 0; index < items.length; index++) {
-                const item = items[index];
-                const songId = item.getAttribute('data-id');
-                
-                const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
-                const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-                const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
-                const points = pointsMap[index] || 0;
-
-                votesToUpload.push({
-                    voter_name: voterName,
-                    id: songId, 
-                    points: points,
-                    mode: currentMode
-                });
-
-                const { data: currentRes } = await supabaseClient
-                    .from('results')
-                    .select('points_pre, points_live')
-                    .eq('id', songId)
-                    .single();
-
-                let pre = currentRes ? (currentRes.points_pre || 0) : 0;
-                let live = currentRes ? (currentRes.points_live || 0) : 0;
-
-                if (currentMode === 'live') { live += points; } else { pre += points; }
-                const total = pre + live;
-
-                await supabaseClient
-                    .from('results')
-                    .update({ points_pre: pre, points_live: live, points_all: total })
-                    .eq('id', songId);
-            }
-
-            await supabaseClient.from('single_votes').insert(votesToUpload);
-
-            if(currentMode === 'pre' && loggedInUserId) {
-                await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-            }
-
-            alert("Erfolgreich abgesendet!");
-            location.reload();
-
-        } catch (err) {
-            console.error(err);
-            alert("Fehler beim Speichern!");
-            btn.disabled = false;
-            btn.innerText = "Voting final absenden";
-        }
-    }
-    initApp();
-    </script>
-</body>
-</html>
