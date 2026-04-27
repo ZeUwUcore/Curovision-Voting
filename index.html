@@ -102,7 +102,7 @@
 
     <div id="recap-overlay" class="hidden">
         <h1 style="color: #00d2ff; margin-top: 0;">🎬 SCHNELLDURCHGANG</h1>
-        <p id="recap-instruction">Das Video startet automatisch (ggf. Ton aktivieren) / Nach dem Video kannst du abstimmen!.</p>
+        <p id="recap-instruction">Das Video startet automatisch (ggf. Ton aktivieren) / Nach dem Video kannst du abstimmen!</p>
         
         <video id="recap-video" 
                controls 
@@ -126,7 +126,7 @@
     let currentMode = '';
     let loggedInUserId = null;
     let recapInterval;
-    let recapTimeLeft = 30;
+    let recapTimeLeft = 468;
 
     async function initApp() {
         const { data } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
