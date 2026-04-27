@@ -126,7 +126,7 @@
     let currentMode = '';
     let loggedInUserId = null;
     let recapInterval;
-    let recapTimeLeft = 468;
+    let recapTimeLeft = 468; // <--- HIER DEN WERT AUF 468 GEÄNDERT
 
     async function initApp() {
         const { data } = await supabaseClient.from('config').select('value').eq('key', 'voting_status').single();
@@ -158,10 +158,15 @@
         const btn = document.getElementById('close-recap-btn');
         
         overlay.classList.remove('hidden');
-        
-        // Video neu laden, falls die URL geändert wurde
         video.load();
-        video.play().catch(err => console.log("Autoplay blockiert oder Video-URL fehlerhaft"));
+
+        // Optional: Setzt den Timer automatisch auf die Videolänge, sobald diese bekannt ist
+        video.onloadedmetadata = () => {
+            recapTimeLeft = Math.floor(video.duration);
+            document.getElementById('recap-timer').innerText = recapTimeLeft;
+        };
+
+        video.play().catch(err => console.log("Autoplay blockiert"));
 
         video.onplay = () => {
             if (!recapInterval && recapTimeLeft > 0) {
@@ -183,22 +188,6 @@
             clearInterval(recapInterval);
             recapInterval = null;
         };
-
-        let lastTime = 0;
-        video.ontimeupdate = () => {
-            if (!video.seeking) {
-                lastTime = video.currentTime;
-            }
-        };
-
-        video.onseeking = () => {
-            const delta = video.currentTime - lastTime;
-            if (Math.abs(delta) > 1) { 
-                video.currentTime = lastTime;
-            }
-        };
-    }
-
     function closeRecap() {
         const video = document.getElementById('recap-video');
         video.pause();
