@@ -136,3 +136,164 @@
     async function startVoting() {
         const name = document.getElementById('username').value;
         if(!name) return alert("Bitte Namen eingeben!");
+        if(currentMode === 'pre') {
+            const pass = document.getElementById('userpassword').value;
+            const { data } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+            if (!data) return alert("Login falsch!");
+            if (data.vote_status === 'yes') return alert("Bereits abgestimmt!");
+            loggedInUserId = data.id;
+            showRecap();
+        } else { proceedToVoting(name); }
+    }
+
+    function showRecap() {
+        const overlay = document.getElementById('recap-overlay');
+        const video = document.getElementById('recap-video');
+        const btn = document.getElementById('close-recap-btn');
+        
+        overlay.classList.remove('hidden');
+        video.load();
+
+        video.onloadedmetadata = () => {
+            recapTimeLeft = Math.floor(video.duration);
+            document.getElementById('recap-timer').innerText = recapTimeLeft;
+        };
+
+        video.play().catch(err => console.log("Autoplay blockiert"));
+
+        video.onplay = () => {
+            if (!recapInterval && recapTimeLeft > 0) {
+                recapInterval = setInterval(() => {
+                    recapTimeLeft--;
+                    document.getElementById('recap-timer').innerText = Math.max(0, recapTimeLeft);
+                    if (recapTimeLeft <= 0) {
+                        clearInterval(recapInterval);
+                        recapInterval = null;
+                        btn.disabled = false;
+                        btn.innerText = "Verstanden! Zum Voting";
+                        btn.style.background = "#00ff88";
+                    }
+                }, 1000);
+            }
+        };
+
+        video.onpause = () => {
+            clearInterval(recapInterval);
+            recapInterval = null;
+        };
+
+        // Anti-Spul-Logik
+        let lastTime = 0;
+        video.ontimeupdate = () => { if (!video.seeking) { lastTime = video.currentTime; } };
+        video.onseeking = () => {
+            const delta = video.currentTime - lastTime;
+            if (Math.abs(delta) > 1) { video.currentTime = lastTime; }
+        };
+    } // <--- Diese Klammer hat gefehlt!
+
+    function closeRecap() {
+        const video = document.getElementById('recap-video');
+        video.pause();
+        document.getElementById('recap-overlay').classList.add('hidden');
+        proceedToVoting(document.getElementById('username').value);
+    }
+
+    function proceedToVoting(name) {
+        document.getElementById('login-area').classList.add('hidden');
+        document.getElementById('voting-area').classList.remove('hidden');
+        document.getElementById('display-name').innerText = name;
+        loadSongs();
+    }
+
+    async function loadSongs() {
+        const { data: songs } = await supabaseClient.from('songs').select('*');
+        const list = document.getElementById('song-list');
+        list.innerHTML = '';
+        
+        let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+        filtered.sort(() => Math.random() - 0.5);
+
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+
+        filtered.forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.setAttribute('data-id', s.id);
+
+            let flagHtml = '';
+            if (currentMode !== 'pre' && s.country) {
+                flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
+            }
+
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+
+            item.innerHTML = `
+                <div class="drag-handle">☰</div>
+                <span class="rank-number">${i+1}</span>
+                <div class="song-info">
+                    <strong>${s.title}</strong>
+                    <small>${flagHtml}${s.artist}</small>
+                </div>
+                <div class="points-badge">${displayLabel}</div>
+            `;
+            list.appendChild(item);
+        });
+
+        new Sortable(list, { 
+            animation: 150, 
+            handle: '.drag-handle',
+            ghostClass: 'sortable-ghost',
+            onEnd: updateBadges 
+        });
+    }
+
+    function updateBadges() {
+        const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+        document.querySelectorAll('.song-item').forEach((item, i) => {
+            item.querySelector('.rank-number').innerText = i + 1;
+            const displayLabel = (currentMode === 'live') ? `${livePoints[i] || 0} Pkt.` : `Rang ${i + 1}`;
+            item.querySelector('.points-badge').innerText = displayLabel;
+        });
+    }
+
+    async function submitVoting() {
+        if(!confirm("Voting jetzt final absenden?")) return;
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerText = "Speichere...";
+        try {
+            const items = document.querySelectorAll('.song-item');
+            const votesToUpload = [];
+            const voterName = document.getElementById('username').value;
+            for (let index = 0; index < items.length; index++) {
+                const item = items[index];
+                const songId = item.getAttribute('data-id');
+                const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+                const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+                const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
+                const points = pointsMap[index] || 0;
+                votesToUpload.push({ voter_name: voterName, id: songId, points: points, mode: currentMode });
+                const { data: currentRes } = await supabaseClient.from('results').select('points_pre, points_live').eq('id', songId).single();
+                let pre = currentRes ? (currentRes.points_pre || 0) : 0;
+                let live = currentRes ? (currentRes.points_live || 0) : 0;
+                if (currentMode === 'live') { live += points; } else { pre += points; }
+                const total = pre + live;
+                await supabaseClient.from('results').update({ points_pre: pre, points_live: live, points_all: total }).eq('id', songId);
+            }
+            await supabaseClient.from('single_votes').insert(votesToUpload);
+            if(currentMode === 'pre' && loggedInUserId) {
+                await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
+            }
+            alert("Erfolgreich abgesendet!");
+            location.reload();
+        } catch (err) {
+            console.error(err);
+            alert("Fehler beim Speichern!");
+            btn.disabled = false;
+            btn.innerText = "Voting final absenden";
+        }
+    }
+    initApp();
+    </script>
+</body>
+</html>
