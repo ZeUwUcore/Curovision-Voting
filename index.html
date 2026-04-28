@@ -138,7 +138,18 @@
         if(!name) return alert("Bitte Namen eingeben!");
         if(currentMode === 'pre') {
             const pass = document.getElementById('userpassword').value;
-            const { data } = await supabaseClient.from('participants').select('*').eq('name', name).eq('password', pass).single();
+            const { data, error } = await supabaseClient.rpc('check_participant_login', {
+    p_name: name,
+    p_password: pass
+});
+
+const user = data ? data[0] : null; 
+
+if (!user) return alert("Login falsch!");
+if (user.vote_status === 'yes') return alert("Bereits abgestimmt!");
+
+loggedInUserId = user.id;
+showRecap();
             if (!data) return alert("Login falsch!");
             if (data.vote_status === 'yes') return alert("Bereits abgestimmt!");
             loggedInUserId = data.id;
@@ -206,13 +217,28 @@
     }
 
     async function loadSongs() {
-        const { data: songs } = await supabaseClient.from('songs').select('*');
-        const list = document.getElementById('song-list');
+    const list = document.getElementById('song-list');
+    list.innerHTML = '<p style="text-align:center;">Lade Songs...</p>';
+
+    try {
+        // Aufruf der sicheren SQL-Funktion statt direkter Tabellenabfrage
+        const { data: songs, error } = await supabaseClient.rpc('get_safe_songs');
+
+        if (error) throw error;
+        if (!songs || songs.length === 0) {
+            list.innerHTML = '<p>Keine Songs gefunden.</p>';
+            return;
+        }
+
         list.innerHTML = '';
         
+        // Eigenen Song ausfiltern (damit man nicht für sich selbst stimmt)
         let filtered = songs.filter(s => Number(s.id) !== Number(loggedInUserId));
+
+        // Zufällige Sortierung beim ersten Laden (Fairness)
         filtered.sort(() => Math.random() - 0.5);
 
+        // Punkte-Arrays definieren
         const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
 
         filtered.forEach((s, i) => {
@@ -220,8 +246,10 @@
             item.className = 'song-item';
             item.setAttribute('data-id', s.id);
 
+            // Flaggen-Logik: Wird nur angezeigt, wenn s.country nicht null/leer ist
+            // (Die SQL-Funktion liefert im Pre-Voting automatisch NULL für country)
             let flagHtml = '';
-            if (currentMode !== 'pre' && s.country) {
+            if (s.country) {
                 flagHtml = `<span class="fi fi-${s.country.toLowerCase()}"></span> `;
             }
 
@@ -229,7 +257,7 @@
 
             item.innerHTML = `
                 <div class="drag-handle">☰</div>
-                <span class="rank-number">${i+1}</span>
+                <span class="rank-number">${i + 1}</span>
                 <div class="song-info">
                     <strong>${s.title}</strong>
                     <small>${flagHtml}${s.artist}</small>
@@ -239,13 +267,19 @@
             list.appendChild(item);
         });
 
+        // Sortier-Funktionalität (SortableJS) initialisieren
         new Sortable(list, { 
             animation: 150, 
             handle: '.drag-handle',
             ghostClass: 'sortable-ghost',
             onEnd: updateBadges 
         });
+
+    } catch (err) {
+        console.error("Fehler in loadSongs:", err);
+        list.innerHTML = '<p style="color:red;">Fehler beim Laden der Songs. Bitte Seite neu laden.</p>';
     }
+}
 
     function updateBadges() {
         const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
@@ -257,42 +291,47 @@
     }
 
     async function submitVoting() {
-        if(!confirm("Voting jetzt final absenden?")) return;
-        const btn = document.getElementById('submit-btn');
-        btn.disabled = true;
-        btn.innerText = "Speichere...";
-        try {
-            const items = document.querySelectorAll('.song-item');
-            const votesToUpload = [];
-            const voterName = document.getElementById('username').value;
-            for (let index = 0; index < items.length; index++) {
-                const item = items[index];
-                const songId = item.getAttribute('data-id');
-                const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
-                const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
-                const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
-                const points = pointsMap[index] || 0;
-                votesToUpload.push({ voter_name: voterName, id: songId, points: points, mode: currentMode });
-                const { data: currentRes } = await supabaseClient.from('results').select('points_pre, points_live').eq('id', songId).single();
-                let pre = currentRes ? (currentRes.points_pre || 0) : 0;
-                let live = currentRes ? (currentRes.points_live || 0) : 0;
-                if (currentMode === 'live') { live += points; } else { pre += points; }
-                const total = pre + live;
-                await supabaseClient.from('results').update({ points_pre: pre, points_live: live, points_all: total }).eq('id', songId);
-            }
-            await supabaseClient.from('single_votes').insert(votesToUpload);
-            if(currentMode === 'pre' && loggedInUserId) {
-                await supabaseClient.from('participants').update({ vote_status: 'yes' }).eq('id', loggedInUserId);
-            }
-            alert("Erfolgreich abgesendet!");
-            location.reload();
-        } catch (err) {
-            console.error(err);
-            alert("Fehler beim Speichern!");
-            btn.disabled = false;
-            btn.innerText = "Voting final absenden";
-        }
+    if(!confirm("Voting jetzt final absenden?")) return;
+    
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = "Speichere...";
+
+    const items = document.querySelectorAll('.song-item');
+    const votesArray = [];
+    
+    // Punkte-Logik vorbereiten
+    const livePoints = [15, 12, 10, 8, 7, 6, 5, 4, 3, 2];
+    const prePoints  = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+    const pointsMap = (currentMode === 'live') ? livePoints : prePoints;
+
+    items.forEach((item, index) => {
+        votesArray.push({
+            song_id: parseInt(item.getAttribute('data-id')),
+            pts: pointsMap[index] || 0
+        });
+    });
+
+    try {
+        // DER SICHERE AUFRUF:
+        const { error } = await supabaseClient.rpc('submit_final_vote', {
+            p_voter_name: document.getElementById('username').value,
+            p_voter_id: loggedInUserId,
+            p_mode: currentMode,
+            p_votes: votesArray
+        });
+
+        if (error) throw error;
+
+        alert("Erfolgreich abgesendet!");
+        location.reload();
+    } catch (err) {
+        console.error(err);
+        alert("Fehler: " + err.message);
+        btn.disabled = false;
+        btn.innerText = "Voting final absenden";
     }
+}
     initApp();
     </script>
 </body>
