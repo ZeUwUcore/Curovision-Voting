@@ -134,28 +134,35 @@
     }
 
     async function startVoting() {
-        const name = document.getElementById('username').value;
-        if(!name) return alert("Bitte Namen eingeben!");
-        if(currentMode === 'pre') {
-            const pass = document.getElementById('userpassword').value;
-            const { data, error } = await supabaseClient.rpc('check_participant_login', {
-    p_name: name,
-    p_password: pass
-});
+    const name = document.getElementById('username').value;
+    if(!name) return alert("Bitte Namen eingeben!");
 
-const user = data ? data[0] : null; 
+    if(currentMode === 'pre') {
+        const pass = document.getElementById('userpassword').value;
+        
+        // Sicherer Login via RPC
+        const { data, error } = await supabaseClient.rpc('check_participant_login', {
+            p_name: name,
+            p_password: pass
+        });
 
-if (!user) return alert("Login falsch!");
-if (user.vote_status === 'yes') return alert("Bereits abgestimmt!");
+        if (error || !data || data.length === 0) {
+            return alert("Login falsch oder Fehler bei der Anmeldung!");
+        }
 
-loggedInUserId = user.id;
-showRecap();
-            if (!data) return alert("Login falsch!");
-            if (data.vote_status === 'yes') return alert("Bereits abgestimmt!");
-            loggedInUserId = data.id;
-            showRecap();
-        } else { proceedToVoting(name); }
+        const user = data[0]; 
+        if (user.vote_status === 'yes') return alert("Bereits abgestimmt!");
+
+        loggedInUserId = user.id; // WICHTIG: Setzt die ID für später
+        showRecap();
+    } else { 
+        // Im Live-Mode nutzen wir oft keine Passwörter, 
+        // aber wir brauchen eine ID. Wenn du hier keine ID hast, 
+        // setzen wir sie auf 0 oder suchen sie anhand des Namens.
+        loggedInUserId = 0; 
+        proceedToVoting(name); 
     }
+}
 
     function showRecap() {
         const overlay = document.getElementById('recap-overlay');
